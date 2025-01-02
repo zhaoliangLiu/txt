@@ -1,0 +1,3226 @@
+Quality-diversity in Dissimilarity Spaces
+Steve Huntsman
+steve.huntsman@str.us
+ABSTRACT
+The theory of magnitude provides a mathematical framework for
+quantifying and maximizing diversity. We apply this framework
+to formulate quality-diversity algorithms in generic dissimilarity
+spaces. In particular, we instantiate a very general version of Go-
+Explore with promising performance for challenging and computa-
+tionally expensive objectives, such as arise in simulations. Finally,
+we prove a result on diversity at scale zero that is interesting in its
+own right and consider its implications for our algorithm.
+CCS CONCEPTS
+•Theory of computation →Mixed discrete-continuous opti-
+mization .
+KEYWORDS
+Quality-diversity optimization, dissimilarity, magnitude
+1 INTRODUCTION
+The survival of a species under selection pressure is a manifestly
+challenging optimization problem, jointly solved by evolution many
+times over despite omnipresent maladaptation [ 17]. This suggests
+that many objective functions that are hard to optimize (and fre-
+quently, also hard to evaluate) may admit a diverse set of inputs that
+perform well even if they are not local extrema. Quality-diversity
+(QD) algorithms [ 24,100] such as NSLC [ 71], MAP-Elites [ 87], and
+their offshoots, seek to produce such sets of inputs, typically by
+discretizing the input space into “cells” and returning the best input
+found for each cell. QD differs from multimodal optimization by
+exploring regions of input space that need not have extrema.1
+The link between exploration and diversity in ecosystems is that
+“nature abhors a vacuum in the animate world” [ 49]. A similar link
+informs optimization algorithms [ 53–55]. The key construction is
+a mathematically principled notion of diversity that generalizes
+information theory by incorporating geometry [ 72,73]. It singles
+out the Solow-Polasky diversity [ 111] ormagnitude of a finite space
+endowed with a symmetric dissimilarity in relation to the “correct”
+definition (1)of diversity that uniquely satisfies various natural
+desiderata. The uniqueness of a diversity-maximizing probability
+distribution has been established [ 74], though to our knowledge
+the only applications to optimization are presently [53–55].
+In this paper, which elaborates on the conference paper [ 56],
+we apply the notion (1)of diversity to QD algorithms for the first
+time by producing a formalization of the breakthrough Go-Explore
+framework [ 33] suited for computationally expensive objectives in
+very general settings. The algorithm requires very little tuning and
+its only requirements are
+1Another practical (if not theoretical) difference between QD and multimodal opti-
+mization algorithms is that the former are often explicitly intended to operate in a
+(possibly latent) low-dimensional behavioral or phenotypical space, but this is mostly
+irrelevant from the primarily algorithmic point of view we concern ourselves with
+here. The key algorithmic point is to consider a “pullback” dissimilarity: for this, see
+the archetypal class of objectives discussed in §3.•a symmetric, nondegenerate dissimilarity (not necessarily
+satisfying the triangle inequality) that is efficient to evaluate;
+•a mechanism for globally generating points in the input
+space (which need not span the entire space, since we can use
+the output of one run of the algorithm to initialize another);
+•an efficient mechanism for locally perturbing existing points;
+•and a mechanism for estimating the objective that permits
+efficient evaluation: e.g., interpolation using polyharmonic
+radial basis functions [19] or a neural network.
+Other than these, the algorithm’s only other inputs are a handful of
+integer parameters that govern the discretization of the input space
+and the effort devoted to evaluating the objective and its cheaper
+estimate. Our examples repeatedly reuse many values for these.
+The paper is organized as follows. In §2, we introduce the con-
+cepts of magnitude and diversity. In §3, we outline the Go-Explore
+framework in the context of dissimilarity spaces. In §4 we construct
+a probability distribution for “going” that balances exploration and
+exploitation. We discuss local exploration mechanisms in §5. In
+§6 we provide a diverse set of examples. Finally, in §7 we analyze
+the effects of considering an extremal notion of diversity before
+concluding in §8.
+2 MAGNITUDE AND DIVERSITY
+For details on the ideas in this section, see §6 of [ 72]; see also [ 54]
+for a slightly more elaborate retelling.
+The notion of magnitude that we will introduce below has been
+used by ecologists to quantify diversity since the work of Solow and
+Polasky [ 111], but much more recent mathematical developments
+have clarified the role that magnitude and the underlying concept
+of weightings play in maximizing a more general and axiomatically
+supported notion of diversity [ 72,74]. We will describe these con-
+cepts in reverse order, moving from diversity to weightings and
+magnitude in turn before elaborating on them.
+A square nonnegative matrix 𝑍is asimilarity matrix if its diago-
+nal is strictly positive. Now the diversity of order 𝑞for a probability
+distribution 𝑝and similarity matrix 𝑍on the same space is
+𝐷𝑍
+𝑞(𝑝):=exp©­
+«1
+1−𝑞log∑︁
+𝑗:𝑝𝑗>0𝑝𝑗(𝑍𝑝)𝑞−1
+𝑗ª®
+¬(1)
+for1<𝑞<∞, and via limits for 𝑞=1,∞.2This is the “correct”
+measure of diversity in essentially the same way that Shannon
+entropy is the “correct” measure of information.
+If the similarity matrix 𝑍is symmetric, then it turns out that
+the diversity-maximizing distribution arg max𝑝𝐷𝑍𝑞(𝑝)is actually
+independent of 𝑞. There is an algorithm to compute this distribution
+that we will discuss below, and in practice we can usually perform
+a nonlinear scaling of 𝑍to ensure the distribution is efficiently
+2The logarithm of (1)is a “similarity-sensitive” generalization of the Rényi entropy of
+order𝑞. For𝑍=𝐼, the Rényi entropy is recovered, with Shannon entropy for 𝑞=1.arXiv:2211.12337v3  [cs.AI]  28 Nov 2023, , Steve Huntsman
+computable. We restrict attention to similarity matrices of the form
+𝑍=exp[−𝑡𝑑] (2)
+where(exp[𝑀])𝑗𝑘:=exp(𝑀𝑗𝑘),𝑡∈(0,∞)is a scale parameter,
+and𝑑is a square symmetric dissimilarity matrix : i.e., its entries are
+in[0,∞], with zeros on and only on the diagonal.3
+Aweighting𝑤is a vector satisfying
+𝑍𝑤=1, (3)
+where the vector of all ones is indicated on the right. A coweighting
+is the transpose of a weighting for 𝑍𝑇. If𝑍has both a weighting 𝑤
+and a coweighting, then its magnitude isÍ
+𝑗𝑤𝑗, which also equals
+the sum of the coweighting components. In particular, if 𝑍is invert-
+ible then its magnitude isÍ
+𝑗𝑘(𝑍−1)𝑗𝑘. The theory of weightings
+and magnitude provide a very attractive and general notion of size
+that encodes rich scale-dependent geometrical data [75].
+Example 1. Take{𝑥𝑗}3
+𝑗=1with𝑑𝑗𝑘:=𝑑(𝑥𝑗,𝑥𝑘)given by𝑑12=
+𝑑13=1=𝑑21=𝑑31and𝑑23=𝛿=𝑑32with𝛿<2. A straightfor-
+ward calculation of (3)using (2)is shown in Figure 1 for 𝛿=10−3.
+At𝑡=10−2, the “effective size” of the nearby points is ≈0.25, and
+that of the distal point is ≈0.5, so at this scale the “effective number
+of points” is≈1. At𝑡=10, the effective number of points is ≈2.
+Finally, at𝑡=104, the effective number of points is ≈3.
+10-210-110010110210310400.250.50.7511.25
+Figure 1: The magnitude 𝑤1+𝑤2+𝑤3of an isoceles dissimilar-
+ity space is a scale-dependent “effective number of points.”
+For a symmetric similarity matrix 𝑍, the positive weighting
+of the submatrix on common row and column indices that has
+the largest magnitude is unique and proportional to the diversity-
+saturating distribution for allvalues of the free parameter 𝑞in(1),
+and this magnitude equals the maximum diversity. Because of the
+exponential number of subsets involved, in general the diversity-
+maximizing distribution is NP-hard to compute, though cases of
+size≤25are easily handled on a laptop.
+The algorithmic situation improves radically if besides being
+symmetric,𝑍is also positive definite4and admits a positive weight-
+ing𝑤(which is unique by positive-definiteness). Then
+arg max𝑝𝐷𝑍
+𝑞(𝑝)=𝑤
+1𝑇𝑤, (4)
+3Henceforth we assume symmetry and nondegeneracy for 𝑑unless stated otherwise.
+We will also write 𝑑for a symmetric, nondegenerate dissimilarity 𝑑:𝑋2→[0,∞]
+with𝑑(𝑥,𝑥)≡0and𝑥≠𝑥′⇒𝑑(𝑥,𝑥′)≠0. Here𝑋is called a dissimilarity space .
+Note that𝑑(as a matrix or function) is notassumed to satisfy the triangle inequality.
+4If𝑑is the distance matrix corresponding to (e.g.) a finite subset of Euclidean space,
+𝑍=exp[−𝑡𝑑]is automatically positive definite: see Theorem 3.6 of [82].i.e., this weighting is proportional to the diversity-maximizing dis-
+tribution, and linear algebra suffices to obtain it efficiently.5
+To engineer this situation, we take 𝑍=exp[𝑡+𝑑], where the
+strong cutoff 𝑡+is the minimal value such that exp[−𝑡𝑑]is positive
+semidefinite and admits a nonnegative weighting for any 𝑡>𝑡+.
+This is guaranteed to exist and can be computed using the bounds
+log(𝑛−1)
+min𝑗max𝑘𝑑𝑗𝑘≤𝑡𝑑≤log(𝑛−1)
+min𝑗min𝑘≠𝑗𝑑𝑗𝑘(5)
+where𝑡𝑑is the minimal value such that exp[−𝑡𝑑]is diagonally
+dominant (i.e., 1>max𝑗Í
+𝑘≠𝑗exp(−𝑡𝑑𝑗𝑘)) and hence also positive
+definite for any 𝑡>𝑡𝑑[54].
+3 GO-EXPLORE
+The animating principle of Go-Explore is to “first return, then ex-
+plore” [ 33]. This is a simple but powerful principle: by returning to
+previously visited states, Go-Explore avoids two pitfalls common
+to most sparse reinforcement learning algorithms such as [ 50]. It
+does not prematurely avoid promising regions, nor does it avoid
+underexplored regions that have already been visited.
+The basic scheme of Go-Explore is to repeatedly
+•probabilistically sample and goto an elite state;
+•explore starting from the sampled elite;
+•map resulting states to a cellular discretization of space;
+•update the elites in populated cells.
+This scheme has achieved breakthrough performance on outstand-
+ing challenge problems in reinforcement learning. Viewing it in
+the context of QD algorithms, we produce in Algorithm 1 a specific
+formal instantiation of Go-Explore for computationally expensive
+objectives on dissimilarity spaces while illustrating ideas and tech-
+niques that apply to more general settings and instantiations.
+The basic setting of interest to us is a space 𝑋endowed with a
+nondegenerate and symmetric (but not necessarily metric) dissimi-
+larity𝑑:𝑋2→[0,∞]and an objective 𝑓:𝑋→Rfor which we
+want a large number of diverse inputs 𝑥(in the sense of (1)) that
+each produce relatively small values of 𝑓. We generally assume that
+𝑓is expensive to compute, so we want to evaluate it sparingly.
+Although we assume the existence of a “global generator” that
+produces points in 𝑋, it does not need to explore 𝑋globally: running
+our algorithm multiple times in succession (with elites from one
+run serving as “landmarks” in the next) addresses this. Similarly,
+although we assume the existence of a “local generator” in the form
+of a probability distribution, we do not need to know much about
+it–only that it be parametrized by a current base point 𝑥∈𝑋and
+some scalar parameter 𝜃, and that we can efficiently sample from it.
+A global generator suffices to provide a good discretization of a
+dissimilarity space along the lines of Algorithms 2 and 3, generaliz-
+ing the approach of [ 118]. Magnitude satisfies an asymptotic (i.e.,
+in the limit𝑡↑∞) inclusion-exclusion formula for compact convex
+bodies in Euclidean space [ 45], and more generally appears to be ap-
+proximately submodular.6This suggests using the standard greedy
+5In Euclidean space, the geometrical manifestation of diversity maximization via
+weightings is an excellent scale-dependent boundary/outlier detection mechanism
+[20, 54, 121]. A technical explanation for this boundary-detecting behavior draws on
+the potential-theoretical notion of Bessel capacities [83].
+6𝐹: 2Ω→Ris submodular iff∀𝑋⊆Ωand𝑥1,𝑥2∈Ω\𝑋s.t.𝑥1≠𝑥2,𝐹(𝑋∪{𝑥1})+
+𝐹(𝑋∪{𝑥2})≥𝐹(𝑋∪{𝑥1,𝑥2})+𝐹(𝑋). LetΩ={(1,0),(0,1),(−1,0),(2,0)}Quality-diversity in Dissimilarity Spaces , ,
+approach for approximate submodular maximization [ 69,88] de-
+spite the fact that we do not have any theoretical guarantees. In
+practice this works well: by greedily maximizing the magnitude of
+a fixed-size subset of states, Algorithm 2 produces a set of diverse
+landmarks, as Figure 3 shows. Ranking the dissimilarities of these
+landmarks to a query point yields a good locality-sensitive hash
+[4, 25, 46, 58, 64, 76, 90, 110, 114].7See Figure 3.
+Although we generally assume an ability to produce a com-
+putationally cheap surrogate for 𝑓and the availability of parallel
+resources for evaluating 𝑓in much the same manner as [ 42,66,124],
+most of our approach can be adapted to cases where either of these
+assumptions do not hold: see §E of the supplement.
+An archetypal class of example objectives is of the form 𝑓=
+𝜙◦𝛾, where𝛾:𝑋→𝑌and𝜙:𝑌→Rrespectively embody a
+computationally expensive “genotype to phenotype” simulation
+and a fitness function such as 𝜙(𝑦)=min𝜔∈Ω𝑑𝑌(𝑦,𝜔)for some
+finite Ω⊂𝑌(e.g., representing desired outcomes of different tasks)
+and with𝑑(𝑥,𝑥′):=𝑑𝑌(𝛾(𝑥),𝛾(𝑥′))a pullback distance.
+This degree of generality is useful. In applications 𝑋and/or𝑌
+might be a pseudomanifold or a discrete structure like a graph or
+space of variable-length sequences, so that 𝑑is not (effectively any-
+thing like) Euclidean. Indeed, a now-classical result (phenomeno-
+logically familiar to users of multidimensional scaling) is that finite
+metrics (to say nothing of more general dissimilarities per se ) are
+generally not even embeddable in Euclidean space [15, 78].
+A class of problems where 𝑌is a graph arises in automatic sce-
+nario generation [ 7,39,77,80,89] where simulations involve a flow
+graph or finite automaton of some sort, e.g. testing and controlling
+machine learning, cyber-physical, and/or robotic systems.8
+Another attractive class of potential applications, in which 𝑋
+is a space of variable-length sequences, is the design of diverse
+proteins and/or chemicals in high-throughput virtual screening
+[48]. In pharmacological settings, a quantitative structure–activity
+relationship is an archetypal objective [ 105]. For example, consider
+the problem of protein design in the context of an mRNA vaccine
+[95] where diversity could aid in the development of universal
+vaccines that protect against a diverse set of viral strains [ 47,67,
+86,97]. Proteins are conveniently represented using nucleic/amino
+acid sequences, and sequence alignment and related techniques
+give relevant dissimilarities [ 57,103]. Using AlphaFold [ 63,117] for
+protein structures and complementary deep learning techniques
+such as [ 81], it is possible to estimate molecular docking results in
+about 30 seconds. Meanwhile, more accurate and precise results
+from absolute binding free energy calculations require about a day
+with a single GPU [ 29].9Our approach appears to offer favorable
+use of parallel resources in realistic applications of this sort [61].
+In still other applications, 𝑌might be a latent space of the sort
+produced by an autoencoder or generative adversarial network [ 38,
+43]. Such applications are not as directly targeted by our instantiated
+endowed with Euclidean distance; let 𝑋={(1,0),(0,1)}; let𝑥1=(−1,0), and𝑥2=
+(2,0). Then (using an obvious notation) Mag(𝑋∪{𝑥1})+ Mag(𝑋∪{𝑥2})≈ 4.1773
+while Mag(𝑋∪{𝑥1,𝑥2})+ Mag(𝑋)≈4.1815 , so magnitude is not submodular.
+7A dissimilarity on the symmetric group 𝑆𝑛can be used to query: see §B.1 (supplement).
+8This is related to fuzzing [ 13,79,123,126], but with an emphasis on phenomenology
+rather than finding bugs, and a different computational complexity regime.
+9For chemical drug design, a convenient representation is the SMILES language [ 120],
+and relevant dissimilarities include [ 91,107]. Here, a chemical drug-target interaction
+objective can be estimated using deep learning approaches such as [44, 65, 109].algorithm since in practice such spaces are treatable as locally
+Euclidean (though only as pseudomanifolds versus manifolds per se
+due to singularities) and more specialized instantiations might be
+suitable. By the same token, we basically ignore the “behavioral”
+focus of many QD algorithms: in our intended applications, the local
+(and frequently global) generators already operate on reasonably
+low-dimensional feature (or latent) spaces, or the dissimilarity is
+pulled back from such a space. That said, engineering landmarks
+rather than using Algorithm 2 can produce cells that follow a grid
+pattern and/or enable internal behavioral representations.
+Algorithm 1 GoExploreDissimilarity (𝑓,𝑑,𝐿,𝑇,𝐾,𝐺,𝑀,𝑔,𝜇 )
+Require: Objective𝑓:𝑋→R, dissimilarity 𝑑:𝑋2→[0,∞],
+number of landmarks 𝐿, number of initial states 𝑇≥𝐿, rank
+cutoff𝐾≪𝐿, global generator 𝐺:N→𝑋, evaluation bud-
+get𝑀, local generator probability distributions 𝑔(𝑥′|𝑥,𝜃), and
+maximum “per-expedition” exploration effort 𝜇
+1:Generate landmarks ⊂initial states 𝑋′using𝐺// Algorithm 2
+2:Evaluate𝑓on𝑋′
+3:Evaluate𝜎(𝐾)on𝑋′and initialize history ℎ // Algorithm 3
+4:while|ℎ|<𝑀do
+5:𝐸←Ð
+𝜏{arg min𝑥∈ℎ:𝜎(𝐾)(𝑥)=𝜏𝑓(𝑥)} // Elites
+6: Compute weighting 𝑤at scale𝑡+on𝐸
+7: Form𝑝∝exp([log𝑤]∧−[𝑓|𝐸]∧) // §4
+8: Compute best feasible lower bound 𝑏≤E𝑝(𝐶⌈|𝐸|/2⌉)// §C
+9:for𝑏steps do
+10: Sample𝑥∼𝑝
+11: Compute exploration effort 𝜇∗∈[𝜇] // §5.1
+12:𝑈←set of the min{|ℎ|,⌈𝜇/2⌉}states inℎnearest to𝑥
+13:𝑉←{𝑦∈ℎ:𝜎(𝐾)(𝑦)=𝜎(𝐾)(𝑥)}
+14: Form local estimate ˆ𝑓of𝑓using data on 𝑈∪𝑉 // §5.2
+15:𝜃←max𝑦∈𝐸𝑑(𝑥,𝑦) // §5.3
+16: Sample(𝑥′
+𝑗)2𝜇
+𝑗=1∼𝑔×2𝜇(·|𝑥,𝜃)
+17: while|{𝑥′
+𝑗:𝜎(𝐾)(𝑥′
+𝑗)=𝜎(𝐾)(𝑥)}|<2𝜇/4do
+18:𝜃←𝜃/2; sample(𝑥′
+𝑗)2𝜇
+𝑗=1∼𝑔×2𝜇(·|𝑥,𝜃)
+19: end while
+20: Get weighting 𝑤′at scale𝑡′+onΛ:={𝑥′
+𝑗}2𝜇
+𝑗=1∪𝑈∪𝑉
+21: Normalize ˆ𝑓|Λand−𝑤′to zero mean and unit variance
+22: Compute Pareto domination of (ˆ𝑓|Λ,−𝑤′) // §5.4
+23:𝑋′←min{𝜇∗,𝑀−|ℎ|}least dominated pairs
+24: end for
+25: Evaluate𝑓and𝜎(𝐾)on𝑋′; updateℎ
+26:end while
+Ensure:ℎ(and𝐸of globally diverse/locally optimal elites as above)
+4 GOING
+A distribution over cells drives the “go” process. We balance explo-
+ration of the space 𝑋and exploitation of the objective 𝑓, respectively
+via a diversity-saturating probability distribution (4)and a distribu-
+tion proportional to exp(−𝛽𝑓). Rather than taking 𝛽as a variable
+regularizer, we use it to remove a degree of freedom. Define
+[𝜙]∧:=𝜙−median𝜙
+max𝜙−median𝜙(6), , Steve Huntsman
+Algorithm 2 GenerateDiverseLandmarks (𝑑,𝐿,𝑇,𝐺)
+Require: Dissimilarity 𝑑:𝑋2→[0,∞], number of landmarks
+𝐿, number of state generations 𝑇≥𝐿, global state generator
+𝐺:N→𝑋that is one-to-one on [𝑇]
+1:for𝑖from 1 to𝐿do
+2:𝑥𝑖←𝐺(𝑖) // State
+3:I(𝑖)←𝑖 // Landmark index
+4:end for
+5:𝐷←𝑑|{𝑥I(𝑖):𝑖∈[𝐿]} // Dissimilarity matrix
+6:𝑡←𝑡+(𝐷) // Strong cutoff
+7:𝑤←exp[−𝑡𝐷]\1 // Weighting
+8:𝑀←1𝑇𝑤 // Magnitude
+9:for𝑖from𝐿+1to𝑇do
+10:𝑖′←arg min𝑤 // State with least weighting component
+11:𝑥𝑖←𝐺(𝑖) // Candidate state
+12:I′←I // Candidate landmark indices
+13:I′(𝑖′)←𝑖 // Try current index for landmark
+14:𝐷′←𝑑|{𝑥I′(𝑖):𝑖∈[𝐿]} // Candidate dissimilarity matrix
+15:𝑤′←exp[−𝑡𝐷′]\1 // Candidate weighting
+16:𝑀′←1𝑇𝑤′// Candidate magnitude
+17: if𝑀′>𝑀then
+18:I←I′,𝑀←𝑀′// Accept candidate
+19: end if
+20:end for
+Ensure: Initial states{𝑥𝑖}𝑇
+𝑖=1,𝐿landmark indices in I⊆[𝑇]
+-3 -2 -1 0 1 2 3 4-3-2-101234
+Figure 2: Algorithm 2 generates 𝐿=15landmarks shown
+as black dots (•) among𝑇=⌈𝐿log𝐿⌉=41states with 𝐺=
+sampling fromU([− 2,3]2). Non-landmark states are shown
+as asterisks (∗) colored from red to blue in order of generation.
+Replacements of prior landmarks are indicated with lines in
+the same color scheme. At the end, landmarks are dispersed.
+Algorithm 3 StateCell(𝑑,{𝑥𝑖}𝑇
+𝑖=1,I,𝐾,𝑥)
+Require: Dissimilarity 𝑑:𝑋2→[0,∞], states{𝑥𝑖}𝑇
+𝑖=1, landmark
+indicesIwith𝐿:=|I|≤𝑇, rank cutoff 𝐾≤𝐿, state𝑥∈𝑋
+1:Sort to get𝜎such that𝑑(𝑥,𝑥I(𝜎(1)))≤···≤𝑑(𝑥,𝑥I(𝜎(𝐿)))
+2:𝜎(𝐾)(𝑥)←(𝜎(1),...,𝜎(𝐾)) //𝐾closest landmarks (sorted)
+Ensure: Cell identifier 𝜎(𝐾)(𝑥)
+and the “go distribution”
+𝑝∝exp([log𝑤]∧−[𝑓|𝐸]∧), (7)
+Figure 3: (All axes are [−3,4]2.) Algorithm 3 maps states to
+cells.𝐿=15landmarks are shown as black dots ( •): these
+are iteratively selected from 𝑇=⌈𝐿log𝐿⌉=41states with
+𝐺=sampling fromU([− 2,3]2)as described in Algorithm
+2. Landmarks are mostly dispersed near the boundary of
+the sampling region. (Left; [resp., center; right]) Cells with
+𝐾=1(resp.,𝐾=2; 3) are all intersections of Voronoi cells of
+landmarks with 0(resp., 1; 2) landmarks omitted. Many of
+the𝐿𝐾notional cells are degenerate.
+where the weighting 𝑤is computed for the set 𝐸of elites at scale
+𝑡+.10The distribution 𝑝encourages visits to cells whose elites
+contribute to diversity and/or have the lowest objective values. As
+elites improve, 𝑝changes over time, reinforcing the “go” process.
+We want to sample from 𝑝to go to enough elites for exploration,
+but not so often as to be impractical. Meanwhile, to mitigate bias, we
+sample over the course of discrete epochs. As §C of the supplement
+details and Algorithm 1 requires, we efficiently compute a good
+lower bound on the expected time for the event 𝐶𝑚of visiting𝑚
+of𝑛elites via IID draws from the distribution 𝑝≡ (𝑝1,...,𝑝𝑛).
+This lower bound is the number of iterations in the inner loop of
+Algorithm 1.
+5 EXPLORING
+In general, the entire exploration mechanism in Algorithm 1 should
+be tailored to the problem under consideration. Nevertheless, for
+the sake of striking a balance between specificity and generality
+we outline elements of an exploration mechanism that works “out
+of the box” on a variety of problems, as demonstrated in §6.
+5.1 Exploration Effort
+If the last two visits to a cell have (resp., have not) improved its
+elite, we spend more (resp., less) effort exploring on the next visit.
+Let𝑓−denote the elite objective from the penultimate visit, and 𝑓0
+the elite objective from the last visit. Let 𝜇−and𝜇0be the corre-
+sponding efforts (i.e., number of exploration steps). If we assume
+𝑓is (empirically) normalized to take values in the unit interval,
+then−1≤−(𝑓0−𝑓−)≤1. At the lower end, 𝑓0−𝑓−=1, which is
+the worst; at the upper end, 𝑓0−𝑓−=−1, which is the best. We
+therefore assign exploration effort
+𝜇+=⌈min{max{1,2−(𝑓0−𝑓−)𝜇0},𝜇}⌉, (8)
+where𝜇∈Nis the maximum exploration effort per “expedition.”
+10The weighting 𝑤at scale𝑡+(and (4)) has one entry equal to zero by construction.
+Therefore the corresponding entry of log𝑤is−∞and we cannot get finite minima or
+moments, which motivates the normalization (6).Quality-diversity in Dissimilarity Spaces , ,
+If and when 𝜇+is unity for long enough across cells, it makes
+sense to halt Algorithm 1 before reaching 𝑀function evaluations:
+however, we do not presently do this.
+5.2 Estimating the Objective Function
+It is generally quite useful to leverage an estimate or surrogate ˆ𝑓to
+optimize an objective 𝑓whose evaluation is computationally expen-
+sive. It is possible to estimate objectives in very general contexts:
+e.g., for𝑋a (di)graph endowed with a symmetric dissimilarity 𝑑,
+via graph learning and/or signal processing techniques [122].
+In the more pedestrian and common settings 𝑋∈{R𝑛,Z𝑛,F𝑛
+2},
+a straightforward approach to estimation is furnished by radial
+basis function interpolation [ 19] using linear (or more generally,
+polyharmonic) basis functions that require no parameters. Our code
+is built with this particular approach in mind.
+5.3 Bandwidth for Random Candidates
+The scalar bandwidth parameter𝜃in the “local generator” 𝑔(𝑥′|𝑥,𝜃)
+corresponds to, e.g., the standard deviation in a spherical Gaussian
+for𝑋∈{R𝑁,Z𝑁},11or the parameter in a Bernoulli trial. The idea
+is that𝜃governs the locality properties of 𝑔, with𝜃large (resp.,
+small) approximating a uniform (resp., point) distribution on 𝑋.
+Note that if we have anymechanism for locally perturbing 𝑥, then
+repeating this 𝜃times allows us to introduce a notion of bandwidth.
+Now we want to be able to set 𝜃so that we actually do explore,
+but only locally (for otherwise we might as well just evaluate 𝑓
+on points produced by 𝐺), i.e., we want to explore within and
+possibly just next to a cell. There is a simple way to do this provided
+that everything except evaluating 𝑓is fast and efficient (which we
+assume throughout). The idea is to sample from 𝑔(·|𝑥,𝜃)with a
+default (large) value for 𝜃to generate a large number of “probes”
+widely distributed in 𝑋. We then decrease 𝜃and sample again until
+a significant plurality of probes are in the same cell as the elite 𝑥.
+Initially, we set 𝜃=max𝑦∈𝐸𝑑(𝑥,𝑦). Although this makes sense
+for𝑔a Gaussian and still generally works for bit flips (albeit at the
+minor cost of probing until 𝜃<1), some care should be exercised
+to ensure the definition of 𝑔and the initialization of 𝜃are both
+compatible with the problem instance at hand.
+5.3.1 Generator Adaptation. An alternative approach is to estimate
+the optimal parameter (here not necessarily scalar) of a local gener-
+ator𝑔. It should often be possible to borrow from CMA-ES [ 51] by
+taking the best performing probes and using them to update the
+covariance of (e.g.) a Gaussian. We forego this here in the interest
+of generality, though it is likely to be very effective [40].
+5.4 Pareto Dominance
+We assume that we can evaluate 𝑓in parallel and produce an esti-
+mate/surrogate ˆ𝑓that is inexpensive to evaluate. It is advantageous
+to evaluate𝑓at points where we expect it to be more optimal based
+onˆ𝑓, as well as at points that increase potential diversity (i.e., a
+weighting component) relative to prior evaluation points.
+11Perhaps surprisingly, sampling from the discrete Gaussian on 𝑋=Z𝑁is very hard
+[2]. Even producing a discrete Gaussian with specified moments is highly nontrivial
+[3]. For these reasons we prefer the simple expedient of rounding (away from zero)
+samples from a continuous Gaussian.Given competing objectives 𝛼𝑖on a set Λ, we say the Pareto
+domination of𝜆∈Λismax𝜆′∈Λmin𝑖[𝛼𝑖(𝜆)−𝛼𝑖(𝜆′)]. In our algo-
+rithm, we take Λto be the union of the set of probes with a set 𝑈of
+nearby states in the evaluation history and the set 𝑉of states in the
+evaluation history that belong to the same cell as the current elite
+𝑥. We take𝛼1=[ˆ𝑓]∥and𝛼2=[−𝑤′]∥, where𝑤′is the weighting
+onΛat scale𝑡+and[·]∥indicates a normalization to zero mean
+and unit variance. The points that are least Pareto dominated form
+a reasonable trade space between exploration and evaluation.
+6 EXAMPLES
+6.1𝑋=R𝑁
+We consider the Rastrigin function (see left panel of Figure 4)
+𝑓(𝑥)=𝐴·𝑁+𝑁∑︁
+𝑗=1
+𝑥2
+𝑗−𝐴cos(2𝜋𝑥𝑗)
+(9)
+onR𝑁with the usual choice 𝐴=10. This has a single global
+minimum at the origin and local minima on Z𝑁. It (or a variant
+thereof) is commonly used as a test objective for QD [ 22,30] as
+well as global optimization problems. Figure 4 (right) and Figure 5
+show the output of Algorithm 1 for varying evaluation budgets.
+-3-2-101234-3-2-101234
+Figure 4: (Left) Plot of (9)on[−3,4]2. (Right) Output of Al-
+gorithm 1 for 𝑀=300evaluations of (9)for𝑁=2with
+𝐿=15,𝑇=⌈𝐿log𝐿⌉=41, and𝐾=2. To break symmetry,
+𝐺=sampling fromU([− 2,3]𝑁). Landmarks/cells are as in
+Figure 3.𝑔(·|𝑥,𝜃)=sampling fromN(𝑥,𝜃2𝐼); maximum per-
+expedition exploration effort 𝜇=128. Evaluated points are
+shown as small red dots ( ·); elites as larger blue dots ( •).
+-3-2-101234-3-2-101234
+-3-2-101234-3-2-101234
+Figure 5: (Left) As in the right panel of Figure 4, but for 𝑀=
+1000. The elite near(1,1)moved near(1,0). (Right)𝑀=3000., , Steve Huntsman
+6.1.1 Benchmarking. Because the cells produced by Algorithm 2
+are irregular, it is difficult to compare our approach to most QD
+algorithms, especially using a QD score [ 100], which is the special
+case𝑊𝑄𝐷(1,𝑓)of
+𝑊𝑄𝐷(𝑤,ˆ𝑓):=|supp𝑤|·𝑤𝑇ˆ𝑓
+𝑤𝑇1, (10)
+where𝑤is typically a solution of (3).12There are two possible
+workarounds: substitute regular cells, or consider a more “light-
+weight” version of the same approach. While the former option
+is superficially attractive in that we can compare to a notional
+reference algorithm, in practice there are only reference imple-
+mentations of otherwise partially specified algorithms. Aligning a
+reference algorithm with Algorithm 2 would force us to consider
+low-dimensional problems that are comparatively disadvantageous
+as discussed shortly below. Since we already know Go-Explore is a
+high-performing class of algorithms, the latter option therefore is
+more informative (and though it does not preclude the former, we
+restrict consideration to it here).
+Specifically, we consider a “baseline” version of Go-Explore with
+several specific and simple choices as described in §F of the supple-
+ment: note in particular that the chosen covariances for 𝑔therein
+are fairly well matched to the geometry of the problem.13The
+results of this and Algorithm 1 with the same settings as in §6.1
+are shown in Figure 6. There is a significant advantage for Algo-
+rithm 1 in dimensions 𝑁∈{10,30}. For dimensions 3 and 100, the
+advantage lessens (not shown). In the former case, this is due to the
+low dimensionality that outweighs any marginal gains due to more
+precise exploitation of local minima. In the latter case, the problem
+becomes sufficiently difficult and the evaluation budget low enough
+that the advantages of Algorithm 1 cannot yet manifest.
+Figure 6: QD scores for Algorithm 1 and a “baseline” Go-
+Explore variant for varying bandwidths applied to the objec-
+tive (9)(normalized to be in [0,1]) in dimensions (left) 𝑁=10
+and (right) 𝑁=30. Results are averaged with standard devia-
+tions indicated. (We elected not to normalize by the nominal
+number of possible cells.)
+6.2𝑋=Z𝑁
+Only minor changes are required to demonstrate Algorithm 1 on
+a nontrivial problem on a discrete lattice. Here we take a scale
+12The usual QD score 𝑊𝑄𝐷(1,𝑓)typically approximates (10) well in practice.
+13The bandwidth for which the resulting Gaussian most nearly approximates the
+objective at the origin (up to an affine transformation) is approximately 0.2.parameter𝜆∈Z+and consider (9)onZ2under the substitution
+𝑥←𝑥/𝜆, while also scaling the domain in the same way. This has
+minima at(𝜆Z)2, with the global minimum at the origin as before.
+By using the same pseudorandom number generator seed (which
+we normally do anyway for reproducibility), we can see a very
+similar variant of §6.1 emerge: see §G of the supplement.
+6.3𝑋=F𝑁
+2
+For binary problems, we embed F2inZvia0↦→0and1↦→1.
+The Sherrington-Kirkpatrick (SK) spin glass objective is [ 14,93]
+𝑓(𝑠)=1√
+𝑁Í
+𝑗𝑘𝐽𝑗𝑘𝑠𝑗𝑠𝑘, (11)
+where𝑠∈{± 1}𝑁is a spin configuration and 𝐽is a symmetric 𝑁×𝑁
+matrix with IIDN(0,1)entries. It is a classic result that optimizing
+(11)isNP-hard, although there is an 𝑂(𝑁2)algorithm that approx-
+imates the optimum with high probability [ 84].14The underlying
+phenomenology is that (SK and more general) spin glasses have
+barrier trees15that exhibit fractal and hierarchical characteristics
+[41,125]. These same adjectives describe the landscape of (11), ex-
+plaining why a near-optimum can be rapidly identified (i.e., via a
+coarse approximation of the landscape) yet an exact optimum still
+requires exponential time to identify in general. Figure 7 shows the
+performance of Algorithm 1 on an instance of (11) with 𝑁=20.
+01020304050607080-22-20-18-16-14-12
+Figure 7: Performance of Algorithm 1 on (11)with𝑁=20,
+𝑑(𝑠,𝑠′):=𝑑1/2
+𝐻(𝑏,𝑏′)for𝑑𝐻=Hamming distance and 𝑏:=
+(𝑠+1)/2,𝐿=10,𝑇=⌈𝐿log𝐿⌉=24,𝐾=2,𝐺=sampling
+fromU(F𝑁
+2),𝑔a Bernoulli bit flipper, and 𝜇=128. There
+are2𝑁≈106possible bit/spin configurations, but after just
+3000 evaluations of (11), many of the lowest minima have
+apparently had their barriers traversed en route . After 300,
+1000, and 3000 evaluations, there are respectively 57, 75, and
+85 elites (of 𝐿𝐾=100nominally possible): meanwhile, there
+are 82 local minima. Many minima have nearest elites with
+lower values because (e.g.) the minima are in unexplored
+cells or because a cell contains more than one minimum.
+14NB. For𝑁large, the software described in [ 99] can be used to generate hard opti-
+mization problems similar to (11) with known minima.
+15The barrier tree of a function is a tree whose leaves and internal vertices repsectively
+correspond to local minima and minimal saddles connecting minima [ 8]. Barrier trees
+of spin glasses can be efficiently computed using the barriers program described in
+[37] and available at https://www.tbi.univie.ac.at/RNA/Barriers/.Quality-diversity in Dissimilarity Spaces , ,
+6.4𝑋=Nondecreasing Bijections on [0,1]
+As a penultimate example, we consider a maze-like problem in
+which we start with a suitable function 𝑓0:[0,1]2→Rand
+subsequently consider the line integral objective
+𝑓(𝛾):=∫
+𝛾𝑓0 (12)
+for𝛾a nondecreasing path from (0,0)to(1,1). This problem has
+several interesting and attractive features:
+•it is infinite-dimensional, and any useful discretization is
+either very high-dimensional or such that the notion of di-
+mension itself is inapplicable to the space 𝑋of paths;
+•it is maze-like, with multiple local minima, opportunities for
+“deception,” straightforward visualization, etc.;
+•we can use an estimate of 𝑓0to estimate 𝑓in turn;
+•the global optimum can be efficiently approximated by com-
+puting the shortest path through a weighted DAG (or by
+dynamic programming per se ).
+A suitable global generator 𝐺requires a bit of engineering: uni-
+formly random lattice paths in (𝜆Z)2from the origin to (1,1)are
+easy to construct, but are exponentially concentrated along the
+diagonal joining the two endpoints, which obstructs exploration.
+Instead, we take the approach indicated in the left panel of Figure
+8, uniformly sampling a point on the diagonal between (0,1)and
+(1,0), then recursively uniformly sampling points on diagonals of
+rectangles induced by parent points in a binary tree structure. The
+right panel of Figure 8 shows 𝐿=15landmarks obtained this way
+with a tree depth of 2, 𝑇=⌈𝐿log𝐿⌉=41, and the usual 𝐿2distance.
+The design of a suitable local generator 𝑔is also not entirely
+trivial: it is necessary to preserve the nondecreasing property of
+paths. For our instantiation, if a path has 𝑛waypoints (including the
+endpoints), then we perform the following procedure 𝑛′:=⌈(𝑛−
+2)𝜃⌉times: i) we sample from a PDF on the set {𝑖𝑛𝑠𝑒𝑟𝑡,𝑚𝑜𝑣𝑒,𝑑𝑒𝑙𝑒𝑡𝑒 }
+that depends on 𝑛′; ii) according to the sample, we either insert a
+new waypoint in a rectangle with adjacent waypoints as corners
+that is subsequently scaled by 𝜃; delete a waypoint if tenable; or
+move a waypoint, again in a rectangle with corners determined by
+adjacent waypoints and subsequently scaled by 𝜃.
+Finally, we take 𝑓0as a weighted sum of 100Gaussians with
+uniformly random centers and covariance 10−3𝐼; the weights are
+∼U([− 1,1]). We take𝐾=2,𝑀=10000 , and𝜇=128. In line with
+the spirit of our developments, we also estimate (12)by performing
+a linear RBF interpolation of 𝑓0using waypoints in paths near the
+current one. However, we also evaluate 𝑓0on≈100points along
+paths to produce a reasonably accurate value for the objective (12).
+The resulting elites are shown in the left panel of Figure 9; the
+right panel shows all of the waypoints considered along the way.
+Higher-performing elites are shown in Figure 10. We can see that
+elites hierarchically coalesce and diverge. Figure 11 shows the 46 (=
+number of elites) shortest paths through weighted DAGs with edges
+from𝜆·(𝑗,𝑘)to𝜆·(𝑗+1,𝑘)and𝜆·(𝑗,𝑘+1)for𝜆∈{1/10,1/100}and
+weights given by 𝜆·𝑓0(edge midpoint); also shown is the closest
+elite to the shortest path and the elite with the best value of 𝑓. Note
+that although there is an elite that approximates the shortest paths
+well, none of these paths are close to the high-performing “upper
+branch” paths shown in Figure 10.
+0 101
+0 101
+-200-150-100-50050100150Figure 8: (Left) A path connecting a binary tree of waypoints
+that are uniformly sampled on diagonals. (Right) Landmarks
+superimposed on a plot of 𝑓0.
+0 101
+-200-150-100-50050100150
+0 101
+-200-150-100-50050100150
+Figure 9: (Left) Elites. (Right) Waypoints on evaluated paths.
+0 101
+-200-150-100-50050100150
+0 101
+-200-150-100-50050100150
+Figure 10: As in the right panel of Figure 9, but for elites with
+𝑓<−8000 (resp.,−4000) on the left (resp., right).
+6.5𝑋=𝑆𝑁−1
+As a final example to further demonstrate the versatility of our
+approach, we construct and fuzz (i.e., we aim to comprehensively
+evaluate behavior on the basis of randomly generated inputs to)
+[13,79,123,126] 100 toy programs that move a unit vector on a
+high-dimensional sphere 𝑆𝑁−1⊂R𝑁according to the following
+procedure:
+First, in each case we generate a program “skeleton” using 300
+productions from the probabilistic context free grammar [119]
+S→S; S|if b; S; fi|while b; S; end (13)
+where Sis shorthand for a line separator: the production probabili-
+ties are respectively 0.6,0.1, and 0.3. The tokens Sandbrespectively
+represent statements/subroutines and Boolean predicates.
+Second, we form the resulting control flow graph (CFG) [ 27] by
+associating vertices with lines in the skeleton and edges according, , Steve Huntsman
+0 101
+-50050100
+0 101
+-200-150-100-50050100150
+Figure 11: (Left) The 46 (= number of elites) shortest paths
+(white) through a discrete approximation with 𝜆−1=10sub-
+divisions per dimension and the elites that are closest to the
+shortest path (black squares) and that are best performing
+(black diamonds). (Right) As on the left, but with 𝜆−1=100.
+Table 1: CFG edge: [·]:=line number of matching token.
+source at line 𝑗target(⊤) target(⊥)
+if b 𝑗+1 [fi]+1
+while b 𝑗+1 [end]+1
+end [while ] -
+fiorS𝑗+1 -
+to Table 1. Next, we fully instantiate a program by i) replacing a
+token Son line𝑗of the program by the assignment 𝑥←𝑆𝑗𝑥, where
+𝑆𝑗is a orthogonal matrix of dimension 𝑁=10sampled uniformly
+at random [ 112]; and ii) replacing a token bon line𝑘of the program
+by the predicate 𝑏𝑇
+𝑘𝑥>0, where𝑏𝑘∼U(𝑆𝑁−1).
+Third, we literally draw the CFG using MATLAB’s layered op-
+tion and define an objective function to be the depth–literally, the
+least vertical coordinate in the drawing–reached when traversing
+2max𝑑𝐶𝐹𝐺(START,·)edges in the CFG by dynamically executing
+the program, where here the program entry and asymmetric di-
+graph distance on the CFG are indicated. The other inputs for the
+algorithm are mostly familiar from other examples above: 𝑑=dis-
+tance on𝑆𝑁−1(we actually get slightly better results with the am-
+bient Euclidean distance [not shown]); 𝐿=15;𝑇=⌈𝐿log𝐿⌉=41;
+𝐾=2;𝐺=sampling fromU(𝑆𝑁−1);𝑔(·|𝑥,𝜃)the unit-length nor-
+malization of sampling from N(𝑥,𝜃2𝐼);𝜇=128; and𝑀=1000 .
+Again, we do this for 100 different programs.
+In Figure 12 we show two of the 100 examples of “code coverage”
+using Algorithm 1 versus𝐺alone. Although on occasion 𝐺produces
+better coverage by itself, this is comparatively uncommon, as the
+right panel of Figure 13 illustrates. It is worth noting that the objec-
+tive here presents some fundamental difficulties for optimization:
+by construction, it is piecewise constant on intricate regions (see
+left panel of Figure 13). From this perspective, the mere existence
+of a clear advantage is significant.
+7 “EXTREMAL” DIVERSITY AT SCALE ZERO
+In the limit 𝑡↑∞, a weighting tends to the vector 1; this and
+consideration of examples such as in Figure 1 suggest that the
+opposite limit 𝑡↓0encodes “extremal” information about diversity.
+Figure 12: (Left) Coverage for the first of 100 CFGs by Al-
+gorithm 1 as described in the text, versus by repeatedly ex-
+ecuting the global generator 𝐺for𝑀=1000 times. Edges
+exercised only by Algorithm 1 are blue; edges exercised only
+by𝐺are red; and edges exercised by both are purple. (Right)
+As in the left panel, but for the last of 100 CFGs.
+020 40 60 80100-1000-50005001000
+Figure 13: (Left) An objective on 𝑆2obtained along the same
+lines as described in §6.5 for 𝑆9, and evaluated on vertices of a
+geodesic polyhedron with 163842 vertices. The grid optimum
+is attained on just eight vertices near the top, indicated with a
+red marker. (Right) Evaluation advantage of Algorithm 1 rela-
+tive to the global generator 𝐺to reach the lower (W)QD-score
+achieved by either over the course of 𝑀=1000 evaluations.
+Note that even though about 15-20 percent of instances are
+disadvantageous, overall there is still a 21-27 percent overall
+advantage for Algorithm 1. This advantage is significant in
+light of the objective’s behavior.
+Figure 15 shows examples of weightings that maximize diversity at
+𝑡=0and compares one of these to the corresponding weighting at
+𝑡=𝑡+. It is clear that the former dramatically singles out “boundary”
+points of a sort. In fact for Euclidean examples, modulo a change
+of metric𝑑↦→√
+𝑑and re-embedding into Euclidean space,16such
+weightings actually single out points lying on a minimal enclosing
+sphere (see below).
+An obvious question is whether or not this extremal notion of
+diversity can provide an advantage when incorporated into Al-
+gorithm 1. However, any possibility of a positive answer to this
+question requires a reasonably efficient algorithm for actually com-
+puting the diversity at 𝑡=0. We pursue this first, focusing on the
+case𝑞=1as it corresponds most closely to Shannon entropy and
+turns out to admit an elegant algorithm (recall that the distribution
+maximizing diversity does not depend on 𝑞in the end).
+16See Proposition 4.12 of [31].Quality-diversity in Dissimilarity Spaces , ,
+For𝑝in the simplex Δ𝑛−1:={𝑝∈[0,1]𝑛: 1𝑇𝑝=1}of nonneg-
+ative probability distributions, the diversity of order 1is
+𝐷𝑍
+1(𝑝):=Ö
+𝑗:𝑝𝑗>0(𝑍𝑝)−𝑝𝑗
+𝑗(14)
+and the corresponding similarity-sensitive generalization of Shan-
+non entropy is
+log𝐷𝑍
+1(𝑝)=−∑︁
+𝑗:𝑝𝑗>0𝑝𝑗log(𝑍𝑝)𝑗. (15)
+We would like to compute the maximum value of (15)for the com-
+mon case𝑍=exp[−𝑡𝑑]in the limit 𝑡↓0for a generic invertible
+dissimilarity matrix 𝑑. While this goal turns out to be overly ambi-
+tious in practice, we can still manage fairly well.
+The first-order approximation 𝑍=exp[−𝑡𝑑]≈11𝑇−𝑡𝑑yields
+log𝐷𝑍
+1(𝑝)≈𝑡𝑝𝑇𝑑𝑝. (16)
+The term𝑝𝑇𝑑𝑝in the right hand side of (16)is the quadratic en-
+tropy [101] and the problem of maximizing it over Δ𝑛−1has been
+considered in, e.g., [ 52,59,60,98]. In the Euclidean setting, [ 98]
+points out that this maximum quadratic entropy is realized by the
+squared radius of a minimal sphere containing points with distance
+matrix√
+𝑑(which is also a Euclidean distance matrix); the support
+of𝑝corresponds to the subset of points on this sphere.
+It can be shown (see, e.g., Example 5.16 of [ 31]) that maximizing
+𝑝𝑇𝑑′𝑝overΔ𝑛−1isNP-hard for arbitrary 𝑑′. This is not surprising
+in light of the fact that quadratic programming is generally NP-hard
+[106] and remains so even when the underlying matrix has only a
+single eigenvalue with a given sign [ 94]. While this sign condition
+is typical for Euclidean distance matrices [ 11,108], it nevertheless
+turns out that for 𝑑a Euclidean distance matrix, 𝑝𝑇𝑑𝑝is convex
+(see Theorem 4.3 of [ 102] and Proposition 5.20 of [ 31]), so it can
+be efficiently maximized over any sufficiently simple polytope via
+quadratic programming. More generally, 𝑝𝑇𝑑𝑝is convex if 𝑑is
+strict negative type , i.e.,𝑥𝑇𝑑𝑥<0for1𝑇𝑥=0: this entails that 𝑍
+is positive semidefinite for all𝑡>0.17In §7.1 we exhibit a more
+practical algorithm than quadratic programming for maximizing
+the quadratic entropy of strict negative type metrics.
+On the other hand, it appears likely that maximizing 𝑝𝑇𝑑𝑝over
+Δ𝑛−1is still generally NP-hard when 𝑍is positive definite only
+for all sufficiently small 𝑡. Yet in this intermediate case we can
+still do better than despairing at general intractability or resorting
+to Algorithm 4 below as a heuristic of uncertain effectiveness by
+developing a nontrivial bound. By Theorem 3.2 of [ 60] we have that
+arg max
+𝑝∈R𝑛:1𝑇𝑝=1𝑝𝑇𝑑𝑝=𝑑−11
+1𝑇𝑑−11,
+though in general this extremum (which also turns out to equal
+the limiting weighting lim𝑡↓0𝑍−11) will have negative components.
+Thus the best practical recourse when 𝑍is positive definite only
+for all sufficiently small 𝑡is to bound 𝑝𝑇𝑑𝑝using
+max
+𝑝∈Δ𝑛−1𝑝𝑇𝑑𝑝≤ max
+𝑝∈R𝑛:1𝑇𝑝=1𝑝𝑇𝑑𝑝=1
+1𝑇𝑑−11. (17)
+17See also [ 72–74,82]. Per Lemma 1.7 of [ 96] as rephrased in Theorem 4.2 of [ 102], we
+can encode the truth or falsity of the assertion that a symmetric nonnegative matrix 𝑑
+of size𝑛is negative type (i.e., 𝑥𝑇𝑑𝑥≤0for1𝑇𝑥=0) in one line of MATLAB, viz.
+eigs(d(2:n,2:n)-d(2:n,1)-d(1,2:n)+d(1,1),1,’smallestabs’)<0 .This unpacks as
+lim
+𝑡↓0log𝐷𝑍
+1(𝑝)
+max𝑝∈Δ𝑛−1log𝐷𝑍
+1(𝑝)≥lim
+𝑡↓0log𝐷𝑍
+1(𝑝)
+max𝑝∈R𝑛:1𝑇𝑝=1log𝐷𝑍
+1(𝑝)
+=(𝑝𝑇𝑑𝑝)·(1𝑇𝑑−11). (18)
+7.1 Maximizing quadratic entropy of strict
+negative type metrics
+Translated into our context, Proposition 5.20 of [ 31] states that if 𝑑
+is strict negative type (again, recall this includes Euclidean distance
+matrices), then
+𝑝∗(𝑑):=arg max
+𝑝∈Δ𝑛−1𝑝𝑇𝑑𝑝 (19)
+is uniquely characterized by the conditions
+i)𝑝∗(𝑑)∈Δ𝑛−1
+ii)𝑒𝑇
+𝑗𝑑𝑝≥𝑒𝑇
+𝑘𝑑𝑝for all𝑗∈supp(𝑝)and𝑘∈[𝑛].
+The following theorem generalizes Theorem 5.23 of [ 31] and
+addresses the 𝑡↓0limit of an algorithm described in the preprint
+[54] but omitted from the published version of record.
+Theorem 2. For𝑑strict negative type, Algorithm 4 returns 𝑝∗(𝑑)
+in time𝑂(𝑛𝜔+1), where𝜔≤3is the exponent characterizing the
+complexity of matrix multiplication and inversion as implemented.
+Algorithm 4 ScaleZeroArgMaxDiversity (𝑑)
+Require: Strict negative type metric 𝑑on[𝑛]
+1:𝑝←𝑑−11
+1𝑇𝑑−11
+2:while∃𝑖:𝑝𝑖<0do
+3:𝐽←{𝑗:𝑤𝑗>0} // Restriction of support
+4:𝑝←0[𝑛]
+5:𝑝𝐽←𝑑−1
+𝐽,𝐽1𝐽
+1𝑇
+𝐽𝑑−1
+𝐽,𝐽1𝐽
+6:end while
+Ensure:𝑝=𝑝∗(𝑑)
+Proof. First, we show that condition ii) is maintained through-
+out the while loop of Algorithm 4. Note that the condition trivially
+holds at initialization, and also note that any nonempty principal
+submatrix𝑑𝐽,𝐽of𝑑is strict negative type and hence invertible.
+Block partitioning 𝑑and𝑝respectively as
+𝑑=𝑑𝐽,𝐽𝑑𝐽,𝐽𝑐
+𝑑𝐽𝑐,𝐽𝑑𝐽𝑐,𝐽𝑐
+;
+𝑝=𝑝𝐽⊕0𝐽𝑐=𝑑−1
+𝐽,𝐽1𝐽
+1𝑇
+𝐽𝑑−1
+𝐽,𝐽1𝐽⊕0𝐽𝑐,
+where𝐽𝑐denotes the set complement [𝑛]\𝐽, we obtain
+𝑑𝑝=1𝐽⊕𝑑𝐽𝑐,𝐽𝑝𝐽
+1𝑇
+𝐽𝑑−1
+𝐽,𝐽1𝐽.
+Thus for𝑗∈𝐽
+𝑒𝑇
+𝑗𝑑𝑝=1
+1𝑇
+𝐽𝑑−1
+𝐽,𝐽1𝐽,, , Steve Huntsman
+and for𝑘∈𝐽𝑐
+𝑒𝑇
+𝑘𝑑𝑝=𝑑𝑘,𝐽𝑑−1
+𝐽,𝐽1𝐽
+1𝑇
+𝐽𝑑−1
+𝐽,𝐽1𝐽.
+As a result, the case 𝑘∈𝐽for condition ii) is trivial, so condition
+ii) is equivalent to
+1≥𝑑𝑘,𝐽𝑑−1
+𝐽,𝐽1𝐽
+for all𝑘∈𝐽𝑐. We rewrite the right hand side until the satisfaction
+of condition ii)’s equivalent becomes obvious:
+𝑑𝑘,𝐽𝑑−1
+𝐽,𝐽1𝐽=∑︁
+𝑗′∈𝐽∑︁
+𝑗∈𝐽𝑑𝑘𝑗(𝑑−1)𝑗𝑗′
+=∑︁
+𝑗′∈𝐽(𝑑𝑑−1)𝑘𝑗′
+=∑︁
+𝑗′∈𝐽𝛿𝑘𝑗′
+=0
+where the last equality is because 𝑘∈𝐽𝑐.
+Algorithm 4 halts once condition i) holds. Finally, because the
+while loop takes at most 𝑛iterations, the computational complexity
+bound follows. □
+Corollary 1. For𝑑strict negative type, Algorithm 4 efficiently
+computes arg max𝑝∈Δ𝑛−1lim𝑡↓0𝐷𝑍𝑞(𝑝)for all𝑞.
+7.2 Practicalities and examples
+As a practical matter, we have found that Algorithm 4 also performs
+better than a quadratic programming solver: it is much faster (in
+MATLAB on≈1000 points, a few hundredths of a second versus
+several seconds for a quadratic programming solver with tolerance
+10−10) and more accurate, in particular by handling sparsity exactly.
+Figure 15 shows representative results. It is also very simple to
+implement: excepting any preliminary checks on inputs, each line
+of the algorithm can be (somewhat wastefully) implemented in a
+standard-length line of MATLAB.
+7.3 Incorporating diversity contributions at
+scale zero and/or a fuzzing-inspired
+exploration effort into Algorithm 1
+There are two obvious places to incorporate scale zero computa-
+tions into Algorithm 1: on elites, and on probes/expeditions sent
+from elites. These respectively address the core “go” and “explore”
+mechanisms in our approach. We modified our original implemen-
+tation to support both of these as options, along with the “entropic
+power schedule” of [ 12] as an option to govern the exploration
+effort.
+Perhaps surprisingly, applying these options to the Rastrigin
+function indicates that none of them has a positive effect, as Fig-
+ure 15 illustrates (we do not show the entropic power schedule
+variant as it was computed for fewer function evaluations and its
+poor performance was already evident). The poor performance
+of scale zero options appears to be because they respectively sup-
+press exploration around “interior” elites and near elites generically
+for the cases in which the scale zero options are applied to elites
+0 0.8827Figure 14: (Upper left, upper right, and lower left) Outputs of
+Algorithm 4 on the Euclidean distance matrix of the ≈1000
+black points, indicated by red circles with radius proportional
+to the corresponding entries of 𝑝. The numbers of nonzero
+(nnz) entries of the output are indicated along with the run-
+times of the algorithm; the same numbers are reported for
+a quadratic programming run with tolerance 10−10. (Lower
+right) The weighting on the same points as in the lower left
+panel at the strong cutoff 𝑡=𝑡+. Recall that this scale is the
+least such that the weighting is nonnegative. Note that even
+at this scale, weighting components still tend to be at corners
+or at least boundaries.
+and probes/expeditions. These factors in turn both impact the abil-
+ity of corresponding variants of Algorithm 1 to find high-quality
+solutions.
+Figure 15: (Left) QD-scores for variants of Algorithm 4 using
+scale zero constructions and applied to the Rastrigin func-
+tion in dimension 𝑁=10(cf. Figure 6). Algorithm 4 itself,
+indicated as the default here, clearly outperforms its variants.
+(Right) As in the left panel, but for dimension 𝑁=30.
+Our consideration of the entropic power schedule of [ 12] was
+inspired by our development of a cousin of Algorithm 1 for the
+fuzzing problem (see §6.5), where we confirmed it offered leading
+performance in accordance with theoretical arguments behind it
+(details will be reported elsewhere). However, the underlying ratio-
+nale of this construction is mismatched with typical considerationsQuality-diversity in Dissimilarity Spaces , ,
+of QD algorithms per se to a degree that was only obvious to us
+after doing an experiment.
+In the fuzzing problem, improving an input amounts to iden-
+tifying an essentially new part of the behavior space. Doing the
+latter optimally is precisely the aim of the entropic power sched-
+ule. Meanwhile, the idea permeating much of the present paper of
+modeling an objective is fundamentally ill-posed in the context of
+fuzzing: once a program’s behavior is reasonably well understood
+in a neighborhood of a given input, that input should be ignored in
+favor of others whose local behavior is not yet well understood.
+In short, while we believe a variant of Algorithm 1 can improve
+the state of the art for fuzzing, and ideas from both diversity op-
+timization at scale zero and fuzzing and are relevant to quality-
+diversity, a naive transplantation of ideas is inadequate in either
+direction. Finally, combining these ideas will also require some com-
+bination of delicacy and/or approximation. If 𝑑is strict negative
+type, we can resort to Algorithm 4 as in applications of Go-Explore
+that seek to interpolate an objective on Euclidean space. However,
+for typical fuzzing applications, we must resort to the bound (18)
+to govern a power schedule of our fuzzer at scale 𝑡=0.18
+8 CONCLUSION
+Our formulation of Go-Explore illustrates that a single quality-
+diversity algorithm can be applied across very general settings.
+The algorithm centers on a mathematically principled definition
+of diversity that admits a tractable maximization scheme. The al-
+gorithm usefully separates concerns of problem details, surrogate
+construction, and its core quality-diversity mechanisms.
+Although we focused here on very structured input spaces in
+order to produce efficient surrogates for expensive objectives in
+the context of quality-diversity algorithms, the notions of diversity,
+magnitude, and weightings provide tools for building optimization
+algorithms more generally. In particular, the prospect of using neu-
+ral surrogates and/or methods for accelerating the computation of
+weightings such as [26, 104] suggest wider scope for applications.
+Finally, while the results of §7 do not yield improvements to
+Algorithm 1, we believe they are of independent interest and can
+yield useful applications of their own.
+ACKNOWLEDGMENTS
+Thanks to Zac Hoffman and Rachelle Horwitz-Martin for clarifying
+questions and suggestions, and to Karel Devriendt for an illuminat-
+ing discussion about maximizing quadratic entropy. This research
+was developed with funding from the Defense Advanced Research
+Projects Agency (DARPA). The views, opinions and/or findings
+expressed are those of the author and should not be interpreted
+as representing the official views or policies of the Department
+of Defense or the U.S. Government. Distribution Statement “A”
+(Approved for Public Release, Distribution Unlimited).
+REFERENCES
+[1] 1981. RFC791: Internet protocol.
+[2]Divesh Aggarwal, Daniel Dadush, Oded Regev, and Noah Stephens-Davidowitz.
+2015. Solving the shortest vector problem in 2n time using discrete Gaussian
+sampling. In Proceedings of the forty-seventh annual ACM symposium on Theory
+of computing . 733–742.
+18Proposition 5.17 of [31] gives the generic bounds 𝑝𝑇𝑑𝑝∈[1
+2,𝑛−1
+𝑛]·max𝑗𝑘𝑑𝑗𝑘.[3]Daniele Agostini and Carlos Améndola. 2019. Discrete Gaussian distributions
+via theta functions. SIAM Journal on Applied Algebra and Geometry 3, 1 (2019),
+1–30.
+[4]Giuseppe Amato and Pasquale Savino. 2008. Approximate similarity search
+in metric spaces using inverted files. In Proceedings of the 3rd international
+conference on Scalable information systems . Citeseer, 1–10.
+[5]Emmanuelle Anceaume, Yann Busnel, and Bruno Sericola. 2015. New results
+on a generalized coupon collector problem using Markov chains. Journal of
+Applied Probability 52, 2 (2015), 405–418.
+[6]Dana Angluin. 1987. Learning regular sets from queries and counterexamples.
+Information and computation 75, 2 (1987), 87–106.
+[7]Mikhail Auguston, James Bret Michael, and Man-Tak Shing. 2005. Environment
+behavior models for scenario generation and testing automation. ACM SIGSOFT
+Software Engineering Notes 30, 4 (2005), 1–6.
+[8]Oren M Becker and Martin Karplus. 1997. The topology of multidimensional
+potential energy surfaces: Theory and application to peptide structure and
+kinetics. The Journal of chemical physics 106, 4 (1997), 1495–1517.
+[9]Jakob Bernasconi. 1987. Low autocorrelation binary sequences: statistical me-
+chanics and configuration space analysis. Journal de Physique 48, 4 (1987),
+559–567.
+[10] Avrim Blum, John Hopcroft, and Ravindran Kannan. 2020. Foundations of data
+science . Cambridge University Press.
+[11] E Bogomolny, O Bohigas, and C Schmit. 2007. Distance matrices and isometric
+embeddings. arXiv preprint arXiv:0710.2063 (2007).
+[12] Marcel Böhme, Valentin JM Manès, and Sang Kil Cha. 2020. Boosting fuzzer
+efficiency: An information theoretic perspective. In Proceedings of the 28th ACM
+Joint Meeting on European Software Engineering Conference and Symposium on
+the Foundations of Software Engineering . 678–689.
+[13] Marcel Böhme, Van-Thuan Pham, Manh-Dung Nguyen, and Abhik Roychoud-
+hury. 2017. Directed greybox fuzzing. In Proceedings of the 2017 ACM SIGSAC
+Conference on Computer and Communications Security . 2329–2344.
+[14] Erwin Bolthausen and Anton Bovier. 2007. Spin glasses . Springer.
+[15] Jean Bourgain. 1985. On Lipschitz embedding of finite metric spaces in Hilbert
+space. Israel Journal of Mathematics 52, 1 (1985), 46–52.
+[16] RT Braden, DA Borman, and C Partridge. 1988. RFC1071: Computing the internet
+checksum.
+[17] Steven P Brady, Daniel I Bolnick, Amy L Angert, Andrew Gonzalez, Rowan DH
+Barrett, Erika Crispo, Alison M Derry, Christopher G Eckert, Dylan J Fraser, Gre-
+gor F Fussmann, et al .2019. Causes of maladaptation. Evolutionary Applications
+12, 7 (2019), 1229–1242.
+[18] Janez Brest and Borko Bošković. 2021. Low Autocorrelation Binary Sequences:
+Best-Known Peak Sidelobe Level Values. IEEE Access 9 (2021), 67713–67723.
+[19] Martin D Buhmann. 2003. Radial basis functions: theory and implementations .
+Cambridge University Press.
+[20] Eric Bunch, Daniel Dickinson, Jeffery Kline, and Glenn Fung. 2020. Practical
+applications of metric space magnitude and weighting vectors. arXiv preprint
+arXiv:2006.14063 (2020).
+[21] Eric Bunch, Jeffery Kline, Daniel Dickinson, Suhaas Bhat, and Glenn Fung. 2021.
+Weighting vectors for machine learning: numerical harmonic analysis applied
+to boundary detection. arXiv preprint arXiv:2106.00827 (2021).
+[22] Leo Cazenille. 2019. Comparing reliability of grid-based Quality-Diversity algo-
+rithms using artificial landscapes. In Proceedings of the Genetic and Evolutionary
+Computation Conference Companion . 249–250.
+[23] Timothy M Chan and Mihai Pătraşcu. 2010. Counting inversions, offline orthog-
+onal range counting, and related problems. In Proceedings of the twenty-first
+annual ACM-SIAM symposium on Discrete Algorithms . SIAM, 161–173.
+[24] Konstantinos Chatzilygeroudis, Antoine Cully, Vassilis Vassiliades, and Jean-
+Baptiste Mouret. 2021. Quality-Diversity Optimization: a novel branch of sto-
+chastic optimization. In Black Box Optimization, Machine Learning, and No-Free
+Lunch Theorems . Springer, 109–135.
+[25] Edgar Chávez, Karina Figueroa, and Gonzalo Navarro. 2008. Effective proximity
+retrieval by ordering permutations. IEEE Transactions on Pattern Analysis and
+Machine Intelligence 30, 9 (2008), 1647–1658.
+[26] D Yu Chenhan, William B March, and George Biros. 2017. An 𝑛log𝑛parallel
+fast direct solver for kernel matrices. In 2017 IEEE International Parallel and
+Distributed Processing Symposium (IPDPS) . IEEE, 886–896.
+[27] Keith D Cooper and Linda Torczon. 2011. Engineering a compiler . Elsevier.
+[28] David Corfield, Hisham Sati, and Urs Schreiber. 2021. Fundamental weight
+systems are quantum states. arXiv preprint arXiv:2105.02871 (2021).
+[29] Zoe Cournia, Bryce K Allen, Thijs Beuming, David A Pearlman, Brian K Radak,
+and Woody Sherman. 2020. Rigorous free energy simulations in virtual screening.
+Journal of Chemical Information and Modeling 60, 9 (2020), 4153–4169.
+[30] Antoine Cully. 2021. Multi-emitter MAP-elites: improving quality, diversity and
+data efficiency with heterogeneous sets of emitters. In Proceedings of the Genetic
+and Evolutionary Computation Conference . 84–92.
+[31] Karel Devriendt. 2022. Graph geometry from effective resistances . Ph.D. Disserta-
+tion. University of Oxford., , Steve Huntsman
+[32] Carola Doerr, Furong Ye, Naama Horesh, Hao Wang, Ofer M Shir, and Thomas
+Bäck. 2020. Benchmarking discrete optimization heuristics with IOHprofiler.
+Applied Soft Computing 88 (2020), 106027.
+[33] Adrien Ecoffet, Joost Huizinga, Joel Lehman, Kenneth O Stanley, and Jeff Clune.
+2021. First return, then explore. Nature 590, 7847 (2021), 580–586.
+[34] Ronald Fagin, Ravi Kumar, and Dakshinamurthi Sivakumar. 2003. Comparing
+top k lists. SIAM Journal on discrete mathematics 17, 1 (2003), 134–160.
+[35] Fernando F Ferreira, José F Fontanari, and Peter F Stadler. 2000. Landscape
+statistics of the low-autocorrelation binary string problem. Journal of Physics
+A: Mathematical and General 33, 48 (2000), 8635.
+[36] Philippe Flajolet, Daniele Gardy, and Loÿs Thimonier. 1992. Birthday paradox,
+coupon collectors, caching algorithms and self-organizing search. Discrete
+Applied Mathematics 39, 3 (1992), 207–229.
+[37] Christoph Flamm, Ivo L. Hofacker, Peter F. Stadler, and Michael T. Wolfinger.
+2002. Barrier Trees of Degenerate Landscapes. 216, 2 (2002), 155–155. https:
+//doi.org/doi:10.1524/zpch.2002.216.2.155
+[38] Matthew C Fontaine, Ruilin Liu, Ahmed Khalifa, Jignesh Modi, Julian Togelius,
+Amy K Hoover, and Stefanos Nikolaidis. 2021. Illuminating mario scenes in
+the latent space of a generative adversarial network. In Proceedings of the AAAI
+Conference on Artificial Intelligence , Vol. 35. 5922–5930.
+[39] Matthew C Fontaine and Stefanos Nikolaidis. 2021. Evaluating Human-Robot
+Interaction Algorithms in Shared Autonomy via Quality Diversity Scenario
+Generation. ACM Transactions on Human-Robot Interaction (2021).
+[40] Matthew C Fontaine, Julian Togelius, Stefanos Nikolaidis, and Amy K Hoover.
+2020. Covariance matrix adaptation for the rapid illumination of behavior
+space. In Proceedings of the 2020 genetic and evolutionary computation conference .
+94–102.
+[41] José F Fontanari and Peter F Stadler. 2002. Fractal geometry of spin-glass models.
+Journal of Physics A: Mathematical and General 35, 7 (2002), 1509.
+[42] Adam Gaier, Alexander Asteroth, and Jean-Baptiste Mouret. 2018. Data-efficient
+design exploration through surrogate-assisted illumination. Evolutionary com-
+putation 26, 3 (2018), 381–410.
+[43] Adam Gaier, Alexander Asteroth, and Jean-Baptiste Mouret. 2020. Discovering
+representations for black-box optimization. In Proceedings of the 2020 Genetic
+and Evolutionary Computation Conference . 103–111.
+[44] Kyle Yingkai Gao, Achille Fokoue, Heng Luo, Arun Iyengar, Sanjoy Dey, and
+Ping Zhang. 2018. Interpretable drug target prediction using deep neural repre-
+sentation. In Proceedings of the 27th International Joint Conference on Artificial
+Intelligence . 3371–3377.
+[45] Heiko Gimperlein and Magnus Goffeng. 2021. On the magnitude function of
+domains in Euclidean space. American Journal of Mathematics 143, 3 (2021),
+939–967.
+[46] Aristides Gionis, Piotr Indyk, Rajeev Motwani, et al .1999. Similarity search in
+high dimensions via hashing. In Vldb, Vol. 99. 518–529.
+[47] Marzia M Giuliani, Jeannette Adu-Bobie, Maurizio Comanducci, Beatrice Ar-
+icò, Silvana Savino, Laura Santini, Brunella Brunelli, Stefania Bambini, Alessia
+Biolchi, Barbara Capecchi, et al .2006. A universal vaccine for serogroup B
+meningococcus. Proceedings of the National Academy of Sciences 103, 29 (2006),
+10834–10839.
+[48] Rafael Gómez-Bombarelli, Jorge Aguilera-Iparraguirre, Timothy D Hirzel, David
+Duvenaud, Dougal Maclaurin, Martin A Blood-Forsythe, Hyun Sik Chae, Markus
+Einzinger, Dong-Gwang Ha, Tony Wu, et al .2016. Design of efficient molecu-
+lar organic light-emitting diodes by a high-throughput virtual screening and
+experimental approach. Nature materials 15, 10 (2016), 1120–1127.
+[49] Joseph Grinnell. 1924. Geography and evolution. Ecology 5, 3 (1924), 225–229.
+[50] Zhaohan Daniel Guo, Mohammad Gheshlaghi Azar, Alaa Saade, Shantanu
+Thakoor, Bilal Piot, Bernardo Avila Pires, Michal Valko, Thomas Mesnard, Tor
+Lattimore, and Rémi Munos. 2021. Geometric entropic exploration. arXiv
+preprint arXiv:2101.02055 (2021).
+[51] Nikolaus Hansen. 2016. The CMA evolution strategy: A tutorial. arXiv preprint
+arXiv:1604.00772 (2016).
+[52] Poul Hjorth, Petr Lison ˘ek, Steen Markvorsen, and Carsten Thomassen. 1998.
+Finite metric spaces of strictly negative type. Linear algebra and its applications
+270, 1-3 (1998), 255–273.
+[53] Zachary Hoffman and Steve Huntsman. 2022. Benchmarking an algorithm
+for expensive high-dimensional objectives on the bbob and bbob-largescale
+testbeds. In GECCO Workshop on Black-Box Optimization Benchmarking (BBOB
+2022) .
+[54] Steve Huntsman. 2022. Diversity enhancement via magnitude. arXiv preprint
+arXiv:2201.10037 (2022).
+[55] Steve Huntsman. 2022. Parallel black-box optimization of expensive
+high-dimensional multimodal functions via magnitude. arXiv preprint
+arXiv:2201.11677 (2022).
+[56] Steve Huntsman. 2023. Quality-diversity in dissimilarity spaces. In Proceedings
+of the Genetic and Evolutionary Computation Conference . 1009–1018.
+[57] Steve Huntsman and Arman Rezaee. 2015. De Bruijn entropy and string simi-
+larity. In WORDS .[58] Piotr Indyk and Rajeev Motwani. 1998. Approximate nearest neighbors: towards
+removing the curse of dimensionality. In Proceedings of the thirtieth annual ACM
+symposium on Theory of computing . 604–613.
+[59] János Izsák and László Szeidl. 2002. Quadratic diversity: its maximization can
+reduce the richness of species. Environmental and Ecological Statistics 9 (2002),
+423–430.
+[60] Saichi Izumino and Noboru Nakamura. 2006. Maximization of quadratic forms
+expressed by distance matrices. Hokkaido Mathematical Journal 35, 3 (2006),
+641–658.
+[61] Guha Jayachandran, Michael R Shirts, Sanghyun Park, and Vijay S Pande. 2006.
+Parallelized-over-parts computation of absolute binding free energy with dock-
+ing and molecular dynamics. The Journal of chemical physics 125, 8 (2006),
+084901.
+[62] Yunlong Jiao and Jean-Philippe Vert. 2015. The Kendall and Mallows kernels
+for permutations. In International Conference on Machine Learning . PMLR, 1935–
+1944.
+[63] John Jumper, Richard Evans, Alexander Pritzel, Tim Green, Michael Figurnov,
+Olaf Ronneberger, Kathryn Tunyasuvunakool, Russ Bates, Augustin Žídek,
+Anna Potapenko, et al .2021. Highly accurate protein structure prediction with
+AlphaFold. Nature 596, 7873 (2021), 583–589.
+[64] Byungkon Kang and Kyomin Jung. 2012. Robust and efficient locality sensitive
+hashing for nearest neighbor search in large data sets. In NIPS Workshop on Big
+Learning (BigLearn), Lake Tahoe, Nevada . Citeseer, 1–8.
+[65] Mostafa Karimi, Di Wu, Zhangyang Wang, and Yang Shen. 2019. DeepAffin-
+ity: interpretable deep learning of compound–protein affinity through unified
+recurrent and convolutional neural networks. Bioinformatics 35, 18 (2019),
+3329–3338.
+[66] Paul Kent and Juergen Branke. 2020. Bop-elites, a bayesian optimisation algo-
+rithm for quality-diversity search. arXiv preprint arXiv:2005.04320 (2020).
+[67] Wayne C Koff and Seth F Berkley. 2021. A universal coronavirus vaccine. ,
+759–759 pages.
+[68] Philip Koopman. 2002. 32-bit cyclic redundancy codes for internet applications.
+InProceedings International Conference on Dependable Systems and Networks .
+IEEE, 459–468.
+[69] Andreas Krause and Daniel Golovin. 2014. Submodular function maximization.
+Tractability 3 (2014), 71–104.
+[70] Ravi Kumar and Sergei Vassilvitskii. 2010. Generalized distances between
+rankings. In Proceedings of the 19th international conference on World wide web .
+571–580.
+[71] Joel Lehman and Kenneth O Stanley. 2011. Evolving a diversity of virtual
+creatures through novelty search and local competition. In Proceedings of the
+13th annual conference on Genetic and evolutionary computation . 211–218.
+[72] Tom Leinster. 2021. Entropy and Diversity: The Axiomatic Approach . Cambridge
+University Press.
+[73] Tom Leinster and Christina A Cobbold. 2012. Measuring diversity: the impor-
+tance of species similarity. Ecology 93, 3 (2012), 477–489.
+[74] Tom Leinster and Mark W Meckes. 2016. Maximizing diversity in biology and
+beyond. Entropy 18, 3 (2016), 88.
+[75] Thomas Leinster and Mark W Meckes. 2017. The magnitude of a metric space:
+from category theory to geometric measure theory. In Measure Theory in
+Non-Smooth Spaces . De Gruyter Open, 156–193.
+[76] Jure Leskovec, Anand Rajaraman, and Jeffrey David Ullman. 2020. Mining of
+massive data sets . Cambridge university press.
+[77] Xiaoyi Li. 2020. A Scenario-Based Development Framework for Autonomous
+Driving. arXiv preprint arXiv:2011.01439 (2020).
+[78] Nathan Linial, Eran London, and Yuri Rabinovich. 1995. The geometry of graphs
+and some of its algorithmic applications. Combinatorica 15, 2 (1995), 215–245.
+[79] Valentin JM Manès, HyungSeok Han, Choongwoo Han, Sang Kil Cha, Manuel
+Egele, Edward J Schwartz, and Maverick Woo. 2019. The art, science, and
+engineering of fuzzing: A survey. IEEE Transactions on Software Engineering 47,
+11 (2019), 2312–2331.
+[80] Glenn Martin, Sae Schatz, Clint Bowers, Charles E Hughes, Jennifer Fowlkes,
+and Denise Nicholson. 2009. Automatic scenario generation through procedural
+modeling for scenario-based training. In Proceedings of the Human Factors and
+Ergonomics Society Annual Meeting , Vol. 53. SAGE Publications Sage CA: Los
+Angeles, CA, 1949–1953.
+[81] Andrew T McNutt, Paul Francoeur, Rishal Aggarwal, Tomohide Masuda, Rocco
+Meli, Matthew Ragoza, Jocelyn Sunseri, and David Ryan Koes. 2021. GNINA 1.0:
+molecular docking with deep learning. Journal of cheminformatics 13, 1 (2021),
+1–20.
+[82] Mark W Meckes. 2013. Positive definite metric spaces. Positivity 17, 3 (2013),
+733–757.
+[83] Mark W Meckes. 2015. Magnitude, diversity, capacities, and dimensions of
+metric spaces. Potential Analysis 42, 2 (2015), 549–572.
+[84] Andrea Montanari. 2021. Optimization of the Sherrington–Kirkpatrick Hamil-
+tonian. SIAM J. Comput. 0 (2021), FOCS19–1.Quality-diversity in Dissimilarity Spaces , ,
+[85] Todd K Moon. 2020. Error correction coding: mathematical methods and algo-
+rithms . John Wiley & Sons.
+[86] David M Morens, Jeffery K Taubenberger, and Anthony S Fauci. 2022. Universal
+coronavirus vaccines—an urgent need. New England Journal of Medicine 386, 4
+(2022), 297–299.
+[87] Jean-Baptiste Mouret and Jeff Clune. 2015. Illuminating search spaces by map-
+ping elites. arXiv preprint arXiv:1504.04909 (2015).
+[88] George L Nemhauser, Laurence A Wolsey, and Marshall L Fisher. 1978. An analy-
+sis of approximations for maximizing submodular set functions—I. Mathematical
+programming 14, 1 (1978), 265–294.
+[89] Anh Mai Nguyen, Jason Yosinski, and Jeff Clune. 2015. Innovation engines:
+Automated creativity and improved stochastic optimization via deep learn-
+ing. In Proceedings of the 2015 Annual Conference on Genetic and Evolutionary
+Computation . 959–966.
+[90] David Novak, Martin Kyselak, and Pavel Zezula. 2010. On locality-sensitive
+indexing in generic metric spaces. In Proceedings of the Third International
+Conference on Similarity Search and Applications . 59–66.
+[91] Hakime Öztürk, Elif Ozkirimli, and Arzucan Özgür. 2016. A comparative study
+of SMILES-based compound similarity functions for drug-target interaction
+prediction. BMC bioinformatics 17, 1 (2016), 1–11.
+[92] Tom Packebusch and Stephan Mertens. 2016. Low autocorrelation binary se-
+quences. Journal of Physics A: Mathematical and Theoretical 49, 16 (2016),
+165001.
+[93] Dmitry Panchenko. 2012. The Sherrington-Kirkpatrick model: an overview.
+Journal of Statistical Physics 149, 2 (2012), 362–383.
+[94] Panos M Pardalos and Stephen A Vavasis. 1991. Quadratic programming with
+one negative eigenvalue is NP-hard. Journal of Global optimization 1, 1 (1991),
+15–22.
+[95] Norbert Pardi, Michael J Hogan, Frederick W Porter, and Drew Weissman. 2018.
+mRNA vaccines—a new era in vaccinology. Nature reviews Drug discovery 17, 4
+(2018), 261–279.
+[96] K R Parthasarathy and K Schmidt. 1972. Positive Definite Kernels, Continuous
+Tensor Products, and Central Limit Theorems of Probability Theory . Springer.
+[97] Catharine I Paules, Sheena G Sullivan, Kanta Subbarao, and Anthony S Fauci.
+2018. Chasing seasonal influenza—the need for a universal influenza vaccine.
+New England Journal of Medicine 378, 1 (2018), 7–9.
+[98] Sandrine Pavoine, Sébastien Ollier, and Dominique Pontier. 2005. Measuring di-
+versity from dissimilarities with Rao’s quadratic entropy: Are any dissimilarities
+suitable? Theoretical population biology 67, 4 (2005), 231–239.
+[99] Dilina Perera, Inimfon Akpabio, Firas Hamze, Salvatore Mandra, Nathan Rose,
+Maliheh Aramon, and Helmut G Katzgraber. 2020. Chook–A comprehensive
+suite for generating binary optimization problems with planted solutions. arXiv
+preprint arXiv:2005.14344 (2020).
+[100] Justin K Pugh, Lisa B Soros, and Kenneth O Stanley. 2016. Quality diversity: A
+new frontier for evolutionary computation. Frontiers in Robotics and AI 3 (2016),
+40.
+[101] C Radhakrishna Rao. 1982. Diversity and dissimilarity coefficients: a unified
+approach. Theoretical population biology 21, 1 (1982), 24–43.
+[102] C Radhakrishna Rao. 1984. Convexity properties of entropy functions and
+analysis of diversity. Lecture Notes-Monograph Series (1984), 68–77.
+[103] Michael S Rosenberg. 2009. Sequence alignment: methods, models, concepts, and
+strategies . Univ of California Press.
+[104] François-Henry Rouet, Xiaoye S Li, Pieter Ghysels, and Artem Napov. 2016. A
+distributed-memory package for dense hierarchically semi-separable matrix
+computations using randomization. ACM Transactions on Mathematical Software
+(TOMS) 42, 4 (2016), 1–35.
+[105] Kunal Roy, Supratik Kar, and Rudra Narayan Das. 2015. A primer on QSAR/QSPR
+modeling: fundamental concepts . Springer.
+[106] Sartaj Sahni. 1974. Computationally related problems. SIAM Journal on comput-
+ing3, 4 (1974), 262–279.
+[107] Soumitra Samanta, Steve O’Hagan, Neil Swainston, Timothy J Roberts, and
+Douglas B Kell. 2020. VAE-Sim: a novel molecular similarity measure based on
+a variational autoencoder. Molecules 25, 15 (2020), 3446.
+[108] Isaac J Schoenberg. 1937. On certain metric spaces arising from Euclidean
+spaces by a change of metric and their imbedding in Hilbert space. Annals of
+mathematics (1937), 787–793.
+[109] Bonggun Shin, Sungsoo Park, Keunsoo Kang, and Joyce C Ho. 2019. Self-
+attention based molecule representation for predicting drug-target interaction.
+InMachine Learning for Healthcare Conference . PMLR, 230–248.
+[110] Eliezer Silva, Thiago Teixeira, George Teodoro, and Eduardo Valle. 2014. Large-
+scale distributed locality-sensitive hashing for general metric data. In Interna-
+tional Conference on Similarity Search and Applications . Springer, 82–93.
+[111] Andrew R Solow and Stephen Polasky. 1994. Measuring biological diversity.
+Environmental and Ecological Statistics 1, 2 (1994), 95–103.
+[112] Gilbert W Stewart. 1980. The efficient generation of random orthogonal matrices
+with an application to condition estimators. SIAM J. Numer. Anal. 17, 3 (1980),
+403–409.[113] Martin Stigge, Henryk Plötz, Wolf Müller, and Jens-Peter Redlich. 2006. Revers-
+ing CRC – theory and practice . Technical Report SAR-PR-2006-05. Humboldt
+Universität zu Berlin.
+[114] Eric Sadit Tellez and Edgar Chavez. 2010. On locality sensitive hashing in metric
+spaces. In Proceedings of the Third International Conference on SImilarity Search
+and APplications . 67–74.
+[115] Sibel Toprak, Arne Wichmann, and Sibylle Schupp. 2014. Lightweight structured
+visualization of assembler control flow based on regular expressions. In 2014
+Second IEEE Working Conference on Software Visualization . IEEE, 97–106.
+[116] Johnny van Doorn, Michael Lee, and Holly Westfall. 2021. Using the weighted
+Kendall Distance to analyze rank data in psychology. (2021).
+[117] Mihaly Varadi, Stephen Anyango, Mandar Deshpande, Sreenath Nair, Cindy
+Natassia, Galabina Yordanova, David Yuan, Oana Stroe, Gemma Wood, Agata
+Laydon, et al .2022. AlphaFold Protein Structure Database: massively expanding
+the structural coverage of protein-sequence space with high-accuracy models.
+Nucleic acids research 50, D1 (2022), D439–D444.
+[118] Vassilis Vassiliades, Konstantinos Chatzilygeroudis, and Jean-Baptiste Mouret.
+2017. Using centroidal voronoi tessellations to scale up the multidimensional
+archive of phenotypic elites algorithm. IEEE Transactions on Evolutionary Com-
+putation 22, 4 (2017), 623–630.
+[119] Nikita Visnevski, Vikram Krishnamurthy, Alex Wang, and Simon Haykin. 2007.
+Syntactic modeling and signal processing of multifunction radars: A stochastic
+context-free grammar approach. Proc. IEEE 95, 5 (2007), 1000–1025.
+[120] David Weininger. 1988. SMILES, a chemical language and information system. 1.
+Introduction to methodology and encoding rules. Journal of chemical information
+and computer sciences 28, 1 (1988), 31–36.
+[121] Simon Willerton. 2009. Heuristic and computer calculations for the magnitude
+of metric spaces. arXiv preprint arXiv:0910.5500 (2009).
+[122] Feng Xia, Ke Sun, Shuo Yu, Abdul Aziz, Liangtian Wan, Shirui Pan, and Huan
+Liu. 2021. Graph learning: A survey. IEEE Transactions on Artificial Intelligence
+2, 2 (2021), 109–127.
+[123] Andreas Zeller, Rahul Gopinath, Marcel Böhme, Gordon Fraser, and Christian
+Holler. 2019. The fuzzing book.
+[124] Yulun Zhang, Matthew Christopher Fontaine, Amy K Hoover, and Stefanos Niko-
+laidis. 2022. DSA-ME: Deep Surrogate Assisted MAP-Elites. In ICLR Workshop
+on Agent Learning in Open-Endedness .
+[125] Qing Zhou and Wing Hung Wong. 2009. Energy landscape of a spin-glass model:
+exploration and characterization. Physical Review E 79, 5 (2009), 051117.
+[126] Xiaogang Zhu, Sheng Wen, Seyit Camtepe, and Yang Xiang. 2022. Fuzzing: a
+survey for roadmap. ACM Computing Surveys (CSUR) (2022).
+A OVERVIEW OF APPENDICES
+•§B sketches alternative “go” mechanisms.
+•§C details bounds governing “how often to go.”
+•§D elaborates on bandwidth in R𝑁.
+•§E sketches alternative “explore” mechanisms.
+•§F lists pseudocode for a baseline version of Go-Explore used
+in §6.1.1.
+•§G shows additional results for §6.2.
+•§H details another example over Z𝑁involving regular ex-
+pression matching.
+•§I elaborates on the binary example in the main text and
+details other examples.
+•§J addresses the repair and consequent effects of a minor
+bug in §K.1.
+•§K contains source code.
+B ALTERNATIVE TECHNIQUES FOR GOING
+Alternatives to a distribution on elites would be distributions on all
+evaluated states or on all cells. Because the number of evaluated
+states grows linearly, the cubic complexity of standard linear algebra
+on them can become untenable, so we do not elaborate on the former
+alternative here.19
+19Appendix E of [ 55] discusses how to improve performance for (3): see also §4 of [ 21]., , Steve Huntsman
+B.1 Distributions on all cells
+A distribution on cells could aim to incorporate i) a weighting based
+on the underlying dissimilarity 𝑑and ii) a global estimate of the
+objective𝑓. Since §5.2 largely addresses ii), we focus here on i).20
+An interesting idea is to use a distance on permutations to define
+a suitable probability distribution over all cells. Such distances
+can yield simple positive definite kernels that elegantly dovetail
+with the magnitude [ 72] framework. For example, if 𝑑is the so-
+called Kendall tau/bubble sort (resp., Cayley ) distance on 𝑆𝑛that
+counts the number of transpositions of adjacent (resp., generic)
+elements needed to transform between two permutations, then the
+corresponding Mallows (resp., Cayley ) kernel exp[−𝑡𝑑]is positive
+definite for all 𝑡≥0[62] (resp., for𝑡>log(𝑛−1)) [28]. The Kendall
+tau distance can be computed in quasilinear time [ 23] and the
+Cayley distance in linear time (by counting cycles in the quotient
+permutation).
+However, there is not much point in pursuing this idea without
+a mechanism for generating states in cells on demand (necessary in
+general due to the curse of dimensionality). For 𝑋=R𝑁the state
+generation mechanism can be effected using linear programming,
+but for𝑋=Z𝑁integer programming is required, and this may
+be prohibitively difficult.21For other spaces there may not be a
+suitable state generation mechanism at all.
+Moreover, if we do not incorporate 𝑑into the generalized Kendall
+or Cayley distance, symmetry just leads to a uniform weighting
+on cells (some of which might also conceivably be degenerate),
+which will not be adequate for the purpose of promoting diversity
+beyond the generation of landmarks. While for the ordinary Kendall
+distance the corresponding similarity matrix (viz., the so-called
+Mallows kernel) is positive definite for any scale [ 62], the analogous
+statement for a generalization along the lines of [ 70] would have
+to be established (or worked around by operating at scale 𝑡+). See
+also [34, 116] for other relevant practicalities in this context.
+C HOW OFTEN TO GO
+Given a distribution 𝑝on elites, we want to sample from 𝑝often
+enough so that a sufficient number of elites serve as bases for
+exploring the space, but not so many times as to be infeasible.
+Meanwhile, to mitigate bias in sampling, it makes sense to sample
+over the course of discrete epochs. The classical coupon collector’s
+problem [36] provides a suitable framework in which a company
+issues a large pool of coupons with 𝑛types that are distributed
+according to 𝑝.
+Per Corollary 4.2 of [ 36], we have that the expected time for the
+event𝐶𝑚of collecting 𝑚of𝑛coupon types via IID draws from the
+20Evaluating𝑓on every cell de novo could also be done using a state generation tech-
+nique described below that is applicable to many cases of practical interest. However,
+this is probably inappropriate for situations we are most concerned with.
+21We sketch the basic idea. A cell is determined by the 𝐾nearest landmarks: w.l.o.g.
+(i.e., up to ignorable degeneracy), we have 𝑑(𝑥,𝑥I(1))<···<𝑑(𝑥,𝑥I(𝐾)), where
+Iis the set of𝐿landmark indices for the set {𝑥𝑖}𝑇
+𝑖=1of initial states. For Euclidean
+space, this is the same as ∥𝑥I(1)∥2−2⟨𝑥I(1),𝑥⟩<···<∥𝑥I(𝐾)∥2−2⟨𝑥I(𝐾),𝑥⟩.
+A point𝑥on the boundary of a cell can thus be produced by linear (or, according to
+context, integer or binary) programming. Moving towards landmarks in a controlled
+manner then yields a point in the interior.distribution(𝑝1,...,𝑝𝑛)satisfies
+E(𝐶𝑚)=𝑚−1∑︁
+ℓ=0(−1)𝑚−1−ℓ𝑛−ℓ−1
+𝑛−𝑚∑︁
+|𝐿|=ℓ1
+1−𝑃𝐿(20)
+with𝑃𝐿:=Í
+𝑘∈𝐿𝑝𝑘. The specific case 𝑚=𝑛admits an integral
+representation that readily admits numerical computation,22viz.
+E(𝐶𝑛)=∫∞
+0 
+1−𝑛Ö
+𝑘=1[1−exp(−𝑝𝑘𝑡)]!
+𝑑𝑡. (21)
+However, the sum (20)is generally hard or impossible to evaluate
+in practice due to its combinatorial complexity, and it is desirable
+to produce useful bounds.23
+As Figures 16 and 17 illustrate, reasonably tight lower bounds
+turn out to be readily computable in practice,
+Towards this end, assume w.l.o.g. that 𝑝1≥···≥𝑝𝑛, and let
+𝑐≤𝑛. (For clarity, it is helpful to imagine that 𝑐<𝑛and𝑝𝑐≫𝑝𝑐+1,
+but we do not assume this.) To boundÍ
+|𝐿|=ℓ(1−𝑃𝐿)−1, we first
+note that{𝐿:|𝐿|=ℓ}is the union of disjoint sets of the form
+{𝐿:|𝐿|=ℓand𝐿∩[𝜆]=𝑀}for𝑀∈2[𝜆], where𝜆:=min{𝑐,ℓ}.
+Thus∑︁
+|𝐿|=ℓ1
+1−𝑃𝐿=∑︁
+𝑀∈2[𝜆]∑︁
+|𝐿|=ℓ
+𝐿∩[𝜆]=𝑀1
+1−𝑃𝐿. (22)
+Now𝑃𝐿=𝑃𝐿∩[𝜆]+𝑃𝐿\[𝜆]. If we are given bounds of the form
+𝜋∗≤𝑃𝐿\[𝜆]≤𝜋∗, we get in turn that
+1
+1−𝑃𝐿∩[𝜆]−𝜋∗≤1
+1−𝑃𝐿≤1
+1−𝑃𝐿∩[𝜆]−𝜋∗.
+If furthermore 𝜋∗and𝜋∗depend on𝐿only via𝐿∩[𝜆], then
+|{𝐿:|𝐿|=ℓand𝐿∩[𝜆]=𝑀}|
+1−𝑃𝑀−𝜋∗≤∑︁
+|𝐿|=ℓ
+𝐿∩[𝜆]=𝑀1
+1−𝑃𝐿
+≤|{𝐿:|𝐿|=ℓand𝐿∩[𝜆]=𝑀}|
+1−𝑃𝑀−𝜋∗.
+(23)
+Meanwhile, writing 𝜇:=|𝑀|and combinatorially interpreting the
+Vandermonde identityÍ
+𝜇 𝜆
+𝜇 𝑛−𝜆
+ℓ−𝜇= 𝑛
+ℓyields
+|{𝐿:|𝐿|=ℓand𝐿∩[𝜆]=𝑀}|=𝑛−𝜆
+ℓ−𝜇
+(24)
+and in turn bounds of the form
+∑︁
+𝑀∈2[𝜆]𝑛−𝜆
+ℓ−𝜇1
+1−𝑃𝑀−𝜋∗≤∑︁
+|𝐿|=ℓ1
+1−𝑃𝐿
+≤∑︁
+𝑀∈2[𝜆]𝑛−𝜆
+ℓ−𝜇1
+1−𝑃𝑀−𝜋∗.(25)
+Now the best possible choice for 𝜋∗is𝑃[ℓ−𝜇]+𝑛−(ℓ−𝜇); simi-
+larly, the best possible choice for 𝜋∗is𝑃[ℓ−𝜇]+min{𝜆,𝑛−(ℓ−𝜇)}. This
+immediately yields upper and lower bounds for (20), though the
+22While an integral representation of E(𝐶𝑚)exists for generic 𝑚, it is also combina-
+torial in form and the result (20) of evaluating it symbolically is easier to compute.
+23A coarser approach to coupon collection than the granular approach of considering a
+distribution over elites would be to determine the number of samples from 𝑝required
+to visit every 𝜎(1)(recall that these are the Voronoi cells of landmarks). To do this, we
+only need to group and add the relevant entries of 𝑝, then apply (21). However, we do
+not pursue this here.Quality-diversity in Dissimilarity Spaces , ,
+alternating sign term leads to intricate expressions that are not
+worth writing down explicitly outside of code.
+The resulting bounds are hardly worth using in some situations,
+and quite good in others. We augment them with the easy lower
+bound obtained by using the uniform distribution in (20)[5] and
+the easy upper bound obtained by taking 𝑚=𝑛and using (21); we
+also use the exact results when feasible (e.g., 𝑛small or𝑚=𝑛) as
+both upper and lower bounds. These basic augmentations have a
+significant effect in practice.
+Experiments on exactly solvable (in particular, small) cases show
+that though the bounds for (1−𝑃𝐿)−1are good, the combinatorics
+involved basically always obliterates the overall bounds for dis-
+tributions of the form 𝑝𝑘∝𝑘−𝛾with𝛾a small positive integer.
+However, the situation improves dramatically for distributions that
+decay quickly enough.
+We can similarly also derive bounds along the lines above based
+on the deviations 𝛿𝑘:=𝑛𝑝𝑘−1. The only significant difference in the
+derivation here versus the one detailed above is that we are forced to
+consider absolute values of the deviations, so although these bounds
+are more relevant to our context, they are also looser in practice.
+We provide a sketch along preceding lines. Write Δ𝐿:=Í
+𝑘∈𝐿𝛿𝑘, so
+that𝑃𝐿=(|𝐿|+Δ𝐿)/𝑛. Assuming w.l.o.g. that |𝛿1|≥···≥|𝛿𝑛|, we
+haveÍ
+|𝐿|=ℓ(1−𝑃𝐿)−1=Í
+𝑀∈2[𝜆]Í
+|𝐿|=ℓ;𝐿∩[𝜆]=𝑀(1−[ℓ+Δ𝐿]/𝑛)−1.
+If𝜋∗≤Δ𝐿\[𝜆]≤𝜋∗with𝜋∗,𝜋∗depending only on 𝐿∩[𝜆], then
+Í
+𝑀∈2[𝜆] 𝑛−𝜆
+ℓ−𝜇(1−[ℓ+Δ𝑀+∗]/𝑛)−1is a lower (resp., upper) bound
+forÍ
+|𝐿|=ℓ(1−𝑃𝐿)−1for∗indicating𝜋∗(resp.,𝜋∗). Meanwhile, the
+best possible choice for 𝜋∗isÍmin{𝜆,𝑛−(ℓ−𝜇)}+(ℓ−𝜇)
+𝑘=min{𝜆,𝑛−(ℓ−𝜇)}+1|𝛿𝑘|≥Δ𝐿\[𝜆]
+and𝜋∗=−𝜋∗.
+In the near-uniform regime we also have the simple and tight
+lower bound E(𝐶𝑚)≥𝑛(𝐻𝑛−𝐻𝑛−𝑚), where𝐻𝑛:=Í𝑛
+𝑘=1𝑘−1is
+the𝑛th harmonic number [ 5,36]. In fact this bound is quite good
+for the linear case in figures below and 𝑛small, to the point that
+replacing harmonic numbers with logarithms can easily produce
+larger deviations from the bound than the error itself.
+D BANDWIDTH IN R𝑁
+In the setting of R𝑁, we can deploy some analysis beforehand. First,
+recall the standard formula∫
+R𝑁𝜓(|𝑥|)𝑑𝑥=𝜔𝑁−1∫∞
+0𝜓(𝑟)𝑟𝑛−1𝑑𝑟
+where𝜔𝑁−1=2𝜋𝑁/2/Γ(𝑁/2)is the Hausdorff-Lebesgue mea-
+sure (i.e., generalized notion of surface area) of 𝑆𝑁−1. Writing here
+𝜈(𝑥)=(2𝜋)−𝑁/2exp(−|𝑥|2/2)for the standard Gaussian, we have
+that∫
+𝐵𝑅(0)𝜈(𝑥)𝑑𝑥=1−Γ(𝑁/2,𝑅2/2)/Γ(𝑁/2), where the numer-
+ator in the rightmost expression is the (upper) incomplete gamma
+function. From this it follows in particular that∫
+𝐵√
+𝑁(0)𝜈(𝑥)𝑑𝑥≈
+1/2.
+This nominally gives us a way to relate the bandwidth (i.e., stan-
+dard deviation) of a spherical Gaussian distribution to the geometry
+of a cell under the Ansatz that we are sampling near the center of a
+roughly spherical cell. However, in high dimensions the vast major-
+ity of a cell’s volume will be near its boundary, and a spherical (or
+for that matter, even ellipsoidal) approximation of the cell geometry
+will also generally be terrible. On the other hand, a slightly more
+detailed analysis along the lines above yields that all but exponen-
+tially little of the probability mass of the standard Gaussian lies in
+1 1618
+0510
+1 1618
+-10123
+1 1618
+0510
+1 1618
+-2-10
+1 1618
+00.51
+1 1618
+00.51
+1 1618
+-0.500.51
+1 1618
+-0.500.511.5
+1 1618
+012Figure 16: Comparison of exact value and (merging of vari-
+ous) upper/lower bounds (omitting exact calculations which
+are feasible for 𝑚≲20from the bounds themselves) for
+E(𝐶𝑚)for various probability distributions with 𝑛=16. These
+results suggest in particular that for the case where 𝑝is ap-
+proximately uniform, a readily computable lower bound is
+reasonably accurate.
+1 1618
+246810
+1 1618
+24681012
+1 1618
+11.51212.5
+1 1618
+-2-10
+1 1618
+00.511.5
+1 1618
+0.511.5
+1 1618
+00.51
+1 1618
+012
+1 1618
+1.522.5
+Figure 17: As in Figure 16, but without including bounds that
+involve a cutoff 𝑐. Again, these results suggest in particular
+that for the case where 𝑝is approximately uniform, a readily
+computable lower bound is reasonably accurate.
+a thin spherical shell with radius centered at√
+𝑁[10]. If now𝛿∗is
+the distance from the origin to the nearest part of its cell boundary
+and𝛿∗is the distance to the farthest part of its cell boundary, then
+we expect that∫
+𝐵𝑅(0)𝜈 𝑑𝑥 is nearly unity for 𝑅<𝛿∗and nearly
+zero for𝑅>𝛿∗, and typically with (something like) a plateau at
+1/2for a not insignificant portion of the interval between these. In
+other words, we can still determine a characteristic radius of the
+cell by finding a bandwidth 𝜃for Gaussian sampling that yields
+about half of the sample points in the cell., , Steve Huntsman
+E ALTERNATIVE TECHNIQUES FOR
+EXPLORING
+For the sake of generality, first assume that we cannot estimate 𝑓
+(say, because 𝑋is not the sort of space that enables estimation). In
+this event, exploration is conceptually simple.
+If parallel evaluation is not possible, simply select the point
+among random candidates that maximizes the differential magni-
+tude relative to prior points in (or that by prior exploration led
+to) the current cell. Because the number of prior points in any
+cell should be fairly small (because the objective is expensive), we
+can usually take them in toto , but if this assumption is violated
+we can restrict consideration to at most a fixed number of points
+with the largest weighting components (at scale zero since we need
+not form a probability distribution, and possibly doing other tricks
+like reserving space for and uniformly sampling some additional
+prior points). In practice (because of approximate submodularity)
+we can usually settle for the approximation of a single weighting
+incorporating all candidate points.
+If parallel evaluation is possible, we can do something similar
+to the landmark generation process to pick a fixed-size subset of
+candidates that (approximately) maximally increase the magnitude
+of the prior points. Alternatively, we can compute the weighting
+of all prior and candidate points and select the top candidates that
+result. (This has the benefit of being faster.)
+Suppose now that we can estimate 𝑓(say by RBF interpolation):
+then we certainly should incorporate that estimate into the explo-
+ration process.
+Again, suppose further that parallel evaluation is not possible:
+then we should pick the candidate point that optimizes the (W)QD-
+score (10)for𝑤the weighting on cells at the prior 𝑡+. Alternatively,
+we can optimize whatever other gauge of performance we care
+about.
+F BASELINE VERSION OF GO-EXPLORE FOR
+§6.1.1
+G RESULTS FOR §6.2: FIGURES 18-19
+-300 -200 -100 0 100 200 300 400-300-200-1000100200300400
+-300 -200 -100 0 100 200 300 400-300-200-1000100200300400
+Figure 18: (L) As in the right panel of Figure 4, but for the
+scaled and discretized variant described in §6.2 with 𝜆=100.
+The domain is Z2;𝐺is given by rounding the uniform distri-
+bution on(𝜆·[−2,3])2, and𝑔is given by rounding a spherical
+Gaussian away from zero. (R) As in the left panel, but for
+𝑀=1000.Algorithm 5 GoExploreBaseline (𝑓,𝑑,𝐿,𝑇,𝐾,𝐺,𝑀,𝑔)
+1:Generate landmarks as subset of initial states 𝑋′using𝐺 //
+Algorithm 2
+2:Evaluate𝑓on𝑋′
+3:Evaluate𝜎(𝐾)on𝑋′and initialize history ℎ // Algorithm 3
+4:while|ℎ|<𝑀do
+5:𝐸←Ð
+𝜏{arg min𝑥∈ℎ:𝜎(𝐾)(𝑥)=𝜏𝑓(𝑥)} // Elites
+6: Compute weighting 𝑤at scale𝑡+on𝐸
+7: Form diversity-maximizing PDF 𝑝 // Pure exploration
+8: Compute number 𝑏of expeditions //𝑏←⌈|𝐸|log|𝐸|⌉
+9:for𝑏steps do
+10: Sample𝑥∼𝑝
+11: Compute exploration effort 𝜇∗ //𝜇∗←10
+12: //𝑔(·|𝑥,𝜃0)← Gaussian with covariance 𝜃2
+0𝐼
+13: Sample𝑋′∼𝑔×𝜇∗(·|𝑥,𝜃0)
+14: end for
+15: Evaluate𝑓on𝑋′
+16: Evaluate𝜎(𝐾)on𝑋′and updateℎ
+17:end while
+Ensure:ℎ(obtain set𝐸of globally diverse and locally optimal
+elites as above)
+-300 -200 -100 0 100 200 300 400-300-200-1000100200300400
+190192194196198200202204206208210-110-108-106-104-102-100-98-96-94-92-90
+Figure 19: (L) As in the right panel of Figure 18, but for 𝑀=
+3000. (R) Detail of the 𝑀=1000 example from the left panel
+of Figure 18.
+H ANOTHER EXAMPLE OVER Z𝑁: REGULAR
+EXPRESSIONS
+Figure 20 shows the minimal discrete finite automaton (DFA) for
+the regular expression
+(ab(ra|cad)+(cad|ab)+ra)|(bar(car)+bad)|(bar(cab)+rad)
+(26)
+over the alphabetA:={a,b,c,d,r}. LetΩbe the set of accepting
+states: both elements are circled in the figure.
+Let𝜄:{0,..., 5}16→A∗be defined by mapping (only) any
+initial nonzero entries to the corresponding elements of A, e.g.,
+𝜄(1,2,5,1,0,..., 0,3)=abra and𝜄(0,1,2,5,1,0,..., 0,3)=𝜖, where
+𝜖indicates the empty string.
+We define the objective
+𝑓(𝑥):= min
+prefixes𝑤of𝜄(𝑥)𝑑𝐷𝐹𝐴(𝑤,Ω) (27)
+where𝑑𝐷𝐹𝐴(𝑤,Ω)indicates the distance on the DFA digraph be-
+tween the last state reached by 𝑤and the accepting states Ω. WeQuality-diversity in Dissimilarity Spaces , ,
+a ba aa
+c r
+dba
+a
+bd
+r d
+a
+c
+rrc bc
+a
+crba
+crr
+a
+ac
+d
+acra
+br
+aaa
+02468directed graph
+distance from
+accepting state
+Figure 20: Minimal DFA for the regular expression (26). The
+initial state is shown with an asterisk; the accepting states
+are shown with circles. For clarity, a garbage state and transi-
+tions to it are not shown. States are colored by their digraph
+distance from one of the two accepting states.
+take𝑑to be Hamming distance; the global generator 𝐺to be sam-
+pling fromU([5]8×{0}8); and the local generator 𝑔(·|𝑥,𝜃)to be
+uniformly changing, appending, or truncating nonzero initial en-
+tries𝜃times. The results of running Algorithm 1 are shown in
+Figures 21-24.
+05001000150020002500300002468
+Figure 21: Values of (27)obtained from a run of Algorithm
+1 with primary inputs as described in the text; 𝐿=15,𝑇=
+⌈𝐿log𝐿⌉=41,𝐾=2, and𝜇=128. Note that we reach an
+accepting state after fewer than 1500 function evaluations,
+while there are 58=390625 strings overAof length equal to
+the unique shortest valid string.
+The problem we are solving here is easier than but related to
+regular language induction from membership queries alone (which
+is not in P: a polytime solution requires additional language queries
+[6]). It is morally an instance of directed greybox fuzzing [ 13] in
+which we try to obtain multiple valid strings and many long diverse
+prefixes of valid strings. In fact, this toy problem broadly illustrates
+abraabra
+abcadabra
+abracadra
+barcabrad
+barcarbad
+abcadcadra
+abraababra
+abraraabra
+abcadababra
+abcadraabra
+abraabcadra
+abracadabra
+abraracadra
+abcadabcadra
+abcadcadabra
+abcadracadra
+abraabababra
+abracadcadra
+abraraababra
+abrararaabra
+barcabcabrad
+barcarcarbad
+abcadabababra
+abcadcadcadra
+abcadraababra
+abcadraraabra
+abraababcadra
+abraabcadabra
+abracadababra
+abracadraabra
+abraraabcadra
+abraracadabra
+abrararacadra0481216Figure 22: Boxchart detailing the extent of the best elite prefix
+for each short regular expression match in an ensemble of
+10 runs of Algorithm 1 with primary inputs as described
+in the text; 𝐿=15,𝑇=⌈𝐿log𝐿⌉=41,𝐾=2,𝜇=128, and
+𝑀=1000. The boxchart shows the central quartiles as boxes,
+outliers (determined via interquartile range) as circles, and
+the range without outliers as lines. Dots indicate the length of
+the string indicated on the horizontal axis. Note that strings
+with the prefix barare an area of relative underperformance,
+presumably because this area has relatively fewer extrema—
+and higher barriers between them—in the first place. Note
+also that medians are typically ≥5, while 55=3125≫𝑀.
+abraabra
+abcadabra
+abracadra
+barcabrad
+barcarbad
+abcadcadra
+abraababra
+abraraabra
+abcadababra
+abcadraabra
+abraabcadra
+abracadabra
+abraracadra
+abcadabcadra
+abcadcadabra
+abcadracadra
+abraabababra
+abracadcadra
+abraraababra
+abrararaabra
+barcabcabrad
+barcarcarbad
+abcadabababra
+abcadcadcadra
+abcadraababra
+abcadraraabra
+abraababcadra
+abraabcadabra
+abracadababra
+abracadraabra
+abraraabcadra
+abraracadabra
+abrararacadra0481216
+Figure 23: As in Figure 22, but for 𝑀=3000.
+directed greybox fuzzing in general: a control flow graph can be
+represented with a DFA, and in turn a regular expression [115]., , Steve Huntsman
+abraabra
+abcadabra
+abracadra
+barcabrad
+barcarbad
+abcadcadra
+abraababra
+abraraabra
+abcadababra
+abcadraabra
+abraabcadra
+abracadabra
+abraracadra
+abcadabcadra
+abcadcadabra
+abcadracadra
+abraabababra
+abracadcadra
+abraraababra
+abrararaabra
+barcabcabrad
+barcarcarbad
+abcadabababra
+abcadcadcadra
+abcadraababra
+abcadraraabra
+abraababcadra
+abraabcadabra
+abracadababra
+abracadraabra
+abraraabcadra
+abraracadabra
+abrararacadra0481216
+Figure 24: As in Figure 22, but for 𝑀=10000 . Note that one
+of the outliers has a prefix corresponding to the regular ex-
+pression match abracadabra .
+I OTHER EXAMPLES OVER F𝑁
+2
+I.1 Supplementary figures for §6.3
+Figure 25 shows the performance of Algorithm 1 on an instance of
+(11) with𝑁=20.
+01020304050607080050010001500200025003000
+-5 0 5 10 15 20 25
+Figure 25: Another view of performance with the same data
+used for Figure 7. Barriers are not shown in lieu of a more
+detailed time evolution.
+One aspect of Figure 26–the small asterisk ∗in the colorbar
+indicating a figure of merit–requires some explanation. Let 𝐴(𝑁,𝑟)
+be the maximum number of points in F𝑁
+2with pairwise Hamming
+distance≤𝑟. The classical binary Hamming bound [85] is
+𝐴(𝑁,𝑟)≤2𝑁
+Í𝑟
+𝑘=0 𝑁
+𝑘, (28)
+and its proof just amounts to observing that the denominator on
+the RHS is the volume of a Hamming sphere of radius 𝑟. This
+immediately yields a figure of merit for the Hamming distancebetween elites and minima. For a set 𝐸⊂F𝑁
+2of elites, let
+𝑟𝐸:=max{𝑟∈N:|𝐸|≤𝐴(𝑁,𝑟)}.
+In the extreme case that 𝐸is a “perfect” error-correcting code, then
+𝑟𝐸is just the “distance” of the code. In general, the points of 𝐸will
+not be so precisely equispaced as this, and 𝐴(𝑁,𝑟)is not easily
+computable, but we can nevertheless get a simple and useful figure
+of merit as follows. By (28),
+𝑟𝐸≤𝑟′
+𝐸:=max(
+𝑟∈N:|𝐸|≤2𝑁
+Í𝑟
+𝑘=0 𝑁
+𝑘)
+(29)
+is easily computable. If the distance between elites and local minima
+tends to be significantly less than 𝑟′
+𝐸, then because Hamming balls
+have volume exponential in 𝑁, the elites have earned their status.
+In Figure 26, this is evidently the case for most of the minima, with
+exceptions tending to be the shallower minima.
+01020304050607080050010001500200025003000
+01234* 5678
+Figure 26: As in Figure 25, but for Hamming distance. The ∗
+on the colorbar indicates the figure of merit 𝑟′
+𝐸in(29).
+I.2 Low-autocorrelation binary sequences
+An even harder problem than that of §6.3 is that of finding low-
+autocorrelation binary sequences (LABS). As [ 32] points out, the
+LABS problem represents a “grand combinatorial challenge with
+practical applications in radar engineering and measurement.” Re-
+call that the autocorrelation of 𝑠∈{± 1}𝑁is𝑅𝑘(𝑠):=Í𝑁−𝑘
+𝑗=1𝑠𝑗𝑠𝑗+𝑘.
+There are two common versions of the LABS problem, which can
+broadly be distinguished as being studied by physicists [ 35,92]
+and by engineers [ 18]. The former, called the Bernasconi model [ 9],
+turns out to have higher barriers than the latter, suggesting a more
+structured landscape. It is defined via the energy function
+𝑓(𝑠)=𝑁−1∑︁
+𝑘=1𝑅2
+𝑘(𝑠), (30)
+whereas the engineers’ version is defined via 𝑓(𝑠)=max𝑘>0|𝑅𝑘(𝑠)|.
+Figures 27-29 show results for (30)with𝑁=16. With only 3000
+evaluations, we have found 6 of 32 optimal sequences in a space
+with 216elements, and 15 of the 100 most optimal sequences.Quality-diversity in Dissimilarity Spaces , ,
+0 20 40 60 80 100275280285290295300305310315
+Figure 27: As in Figure 7, but for (30)with𝑁=16. Only the
+100 lowest minima are shown.
+0 20 40 60 80 100050010001500200025003000
+020406080100120140160180
+Figure 28: As in Figure 25, but for (30)with𝑁=16. Only the
+100 lowest minima are shown.
+0 20 40 60 80 100050010001500200025003000
+0 1 2 3* 4 5 6 7
+Figure 29: As in Figure 26, but for (30)with𝑁=16. Only the
+100 lowest minima are shown.
+I.3 Checksums and cyclic redundancy checks
+Packet headers for version 4 of the Internet Protocol (IPv4) [ 1]
+include, among others, fields for the version (= 4), header length,and a 16-bit checksum [ 16]. We ran our algorithm for 3000 steps
+onF160
+2with
+𝑓=4𝑑𝐻(version,4)+4𝑑𝐻(length,160)
++𝑑𝐻(nominal checksum ,IPv4 checksum),
+𝐿=6,𝑇=⌈𝐿log𝐿⌉,𝐾=2,𝐺uniform, and 𝑔given by bit flips
+with a Bernoulli parameter of 𝑞for all bits except the ones in the
+objective𝑓, which have a Bernoulli parameter of 10𝑞, and𝜇=128.
+This resulted in 30 elites, four of which were “perfect” in that
+their version, header length, and checksum were valid. Note that
+(although this exercise was highly artificial) this means that we ob-
+tained four distinct IPv4 headers in which 24 bits were dynamically
+set to precise values using just 3000 evaluations of an objective.
+Moreover, most elites had near neighbors in Hamming space. Below,
+we show the packet headers and correct checksums in hexadecimal
+format, with correct checksums shown in blue.
+450555F106FE248015005326DE91FAC443C1CFD0
+450555F106FE248015005326DE91FAC443C1CFD4
+450755F3925640800700FB259E91F8414B80CE54
+450755F3925640800700FBA59E99DA4143C0CED4
+450755F3925640800700FBA59E99DB4143C0CED4
+450FDCB3AAC7EB8202009BF4DE3BCAC343C1CFD0
+450FDEF3AAC66B8203007D66DE3BCAC063C1CDD0
+458455F106FA248015005324DE99EAC443C0CFD0
+458555F106FE248015005326DE91EAC043C0CFD0
+459DFA69A85A324C6B8B6866CFA398CD748D2C65
+459DFA69A85A324C6B8B7066CF2398CD748D2C65
+459DFA69A85A324C6B8B7866CFA398CD748D2C65
+459DFAC88879365C4B8B79D4CDA318CD74896E61
+459DFAC88879365C6B8BE9D4CFA338CD74892E69
+459FFAC8985936586B8A4967CFB0194D748D6E68
+45C3034F5DBADCD3C3552E0274983B1687DC196F
+45C3834F1DBA9CD3C355680F70983B1687DC196F
+45C3834F5DB29CD3C3552607709A3A1687DC196F
+45C3834F5DBA9CD3C3552C09709A3A16875C196F
+45C3834F5DBA9CD3C3552C0F70983B1687DC196F
+45C3834F5DBB9CD3C3550C0F709A3B1687DE196E
+45C383CB5DBA9CD3C3552C81709A3A16875C19EF
+45C38B5B5DBA9F92C35D13B0608A3A5F865D393B
+45C38B5F5DBA9F92C35D12F0618A3A1F865D393B
+45C38B5F5DBA9F92C35D1330608A3A5F865D393B
+45C38B5F5DBA9F92C35D13B0608A3A5F865D393B
+45C38BDF5DBA9F92C35D13B0608A3A5F865D393B
+45DA7BFA1A2158A1C3AA3A7095541C1440E90080
+45DA7BFA1A2158A9C3A259F0955C1C1440ED0080
+45EA3895E95A129D3850AC069E146A8932968AEE
+Similar exercises using the 32-bit cyclic redundancy check (CRC)
+[68] used in (e.g.) the IEEE 802.3 standard for Ethernet and many
+other protocols/programs suggest that more effort is required. In-
+deed, using the 16-bit CRC corresponding to the polynomial 𝑥16+
+𝑥15+𝑥2+1and𝑔corresponding to uniformly flipping bits of the
+CRC along with 32 other bits in a notional Ethernet frame, we get
+only two of 19 elites with the correct CRC after 15000 evaluations
+of an objective that is the Hamming distance between the CRC and
+its nominal bits. This is in line with the general observation that, , Steve Huntsman
+reversing CRCs is nontrivial, though readily accomplished with
+dedicated algorithms [113].
+J EFFECT OF A BUG IN PREVIOUS VERSION
+OF CODE IN §K.1
+After the first version of this paper was prepared, we identified and
+repaired a bug in the code in §K.1, then reran the examples. The
+original code was
+nearInd = unique([find(inCell(:) '),nearest(1:numNearest)]);
+For consistency with Algorithm 1, we replaced this with
+% BUG FIXED: inBase was inCell
+nearInd = unique([find(inBase(:) '),nearest(1:numNearest)]);
+The bug meant that some of the points used to interpolate the
+objective were always chosen from the inhabited cell with lexico-
+graphically least 𝜎(𝐾)instead of the current “go-to” cell.
+Fixing this bug had little quantitative effect, but suggested that
+the intended interpolation encourages “drilling down” into initial
+minima slightly more relative to initial exploration. This effect was
+small because the nearest points were still chosen for interpolation,
+and only the relatively few points in the base cell that were not
+sufficiently near were missed.
+K SOURCE CODE
+NB. The LaTeX source of a preprint version of this document con-
+tains scripts that use the code here to reproduce results/figures
+throughout.
+K.1 goExploreDissimiliarity.m
+function [history,landmarks] = goExploreDissimilarity(f,dis,L,T,K,...
+globalGenerator,objectiveEvalBudget,isPosDef,localGenerator,...
+maxExploreEffort)
+% Go-Explore instantiation serving as a quality-diversity algorithm (see
+% https://quality-diversity.github.io/, and cf. multimodal optimation,
+% which this can also do) using mangitude-based constructs on a
+% dissimilarity space, and fundamentally using not much else besides
+% mechanisms for "globally" and "locally" generating points.
+%
+% NB. This particular instantiation also leverages linear radial basis
+% function interpolation and thus is "only" suitable for boxes in Euclidean
+% space, lattices therein, and bitvectors (these last two with only
+% slightly more involved exploration function handles). However, in general
+% any other approach to predicting the objective f (e.g., a neural net)
+% could be cleanly substituted in the code. Still more generally, a pure
+% exploration mechanism based on magnitude alone could be instantiated in
+% the event that objective prediction is impossible in a given situation.
+%
+% Inputs (with examples):
+% f, function handle for objective, e.g. Rastrigin function:
+% f = @(x) 10*numel(x)+x(:) '*x(:)-10*sum(cos(2*pi*x(:)));
+% dis, function handle for dissimilarity (assumed symmetric), e.g.
+% dis = @(x0,x1) vecnorm(x0-x1); % L2
+% NB. If dis is insufficiently regular, it may be profitable to
+% redefine it using the regularizeMagnitudeDimension function.
+% For this reason, we don 't assume dis is the L2 distance
+% L, number of landmarks (<= T)
+% T, number of states to generate (including landmarks, so >= L)
+% K, rank cutoff <= L
+% globalGenerator,
+% function handle for global state generator, e.g.
+% dim = 2;
+% lb = -2*ones(dim,1); % lower bounds
+% ub = 3*ones(dim,1); % upper bounds
+% globalGenerator = ...
+% @() diag(ub-lb)*rand(dim,1)+diag(lb)*ones(dim,1);
+% objectiveEvalBudget,
+% number of evaluations of f to perform
+% isPosDef,
+% flag to set (as per MATLAB logic, to any nonzero number) if dis
+% is known a priori to be positive definite. As
+% https://doi.org/10.1515/9783110550832-005 points out, this is
+% the case whenever dis is (e.g.)% * the usual $\ell^p$ (or even $L^p$) norm for 1 <= p <= 2
+% * the usual metric on hyperbolic space
+% * an ultrametric
+% * the usual metric on a weighted tree
+% Setting this flag allows us to avoid computing spectra that
+% would otherwise be required to maintain the connection between
+% weightings and diversity-saturating distributions
+% localGenerator,
+% function handle for exploration subroutine, e.g.
+% localGenerator = @(x,theta) x+theta*randn(size(x));
+% where here theta plays the role of standard deviation, and more
+% generally is expected to be governed by some scalar
+% "bandwidth." See note below on doing this for ints and bools,
+% and also a comment in code containing the string <BANDWIDTH>
+% maxExploreEffort,
+% number bounding exploration effort, as measured in number of
+% evaluations of f per "expedition"
+%
+% Outputs:
+% history,
+% struct with fields
+% * state i.e., an input to f
+% * cell the cell containing the state
+% * birth the "epoch" in which the state was "born"
+% * reign the last epoch in which the state was elite
+% * objective the function objective value
+% landmarks,
+% cell (row) array of landmark states
+%
+% Example: the Rastrigin function
+% rng( 'default ');
+% f = @(x) 10*numel(x)+x(:) '*x(:)-10*sum(cos(2*pi*x(:))); % Rastrigin
+% dis = @(x0,x1) vecnorm(x0-x1);
+% L = 15;
+% T = ceil(L*log(L));
+% K = 2;
+% dim = 2;
+% lb = -2*ones(dim,1); % lower bounds
+% ub = 3*ones(dim,1); % upper bounds
+% globalGenerator = @() diag(ub-lb)*rand(dim,1)+diag(lb)*ones(dim,1);
+% localGenerator = @(x,theta) x+theta*randn(size(x));
+% M = 3e2;
+% isPosDef = 1;
+% maxExploreEffort = 128;
+% warning off; % to keep partialCouponCollection from complaining
+% [history,landmarks] = goExploreDissimilarity(f,dis,L,T,K,...
+% globalGenerator,M,isPosDef,localGenerator,maxExploreEffort);
+% warning on;
+% % Plot
+% isCurrentElite = ([history.reign]==max([history.reign]));
+% elite = {history(isCurrentElite).state};
+% h_fig = figure;
+% hold on;
+% bar = cell2mat(landmarks);
+% ind = nchoosek(1:size(bar,2),size(bar,2)-(K-1));
+% for ell = 1:size(ind,1)
+% h_fig = voronoi(bar(1,ind(ell,:)),bar(2,ind(ell,:)));
+% for j = 1:numel(h_fig)
+% set(h_fig(j), 'Color ',[0,0,0]);
+% end
+% end
+% foo = cell2mat(elite);
+% scatter(foo(1,:),foo(2,:),20,...
+% 'MarkerEdgeColor ',[0,0,1], 'MarkerFaceColor ',[0,0,1]);
+% bar = cell2mat({history.state});
+% plot(bar(1,:),bar(2,:), 'r.','MarkerSize ',1);
+% grid on;
+% daspect([1,1,1]);
+% axis([lb(1)-1,ub(1)+1,lb(2)-1,ub(2)+1]);
+%
+% Example 2: a variant on the above with integer-valued states. Modify the
+% above example along the following lines:
+% scale = 100;
+% f = @(x) 10*numel(x)+x(:) '*x(:)/scale^2-10*sum(cos(2*pi*x(:)/scale));
+% lb = -2*ones(dim,1)*scale; % lower bounds
+% ub = 3*ones(dim,1)*scale; % upper bounds
+% globalGenerator = @() round(diag(ub-lb)*rand(dim,1)+diag(lb)*ones(dim,1));
+% rafz = @(x) ceil(abs(x)).*sign(x); % round away from zero
+% localGenerator = @(x,theta) x+rafz(theta*randn(size(x)));
+% Zooming into the resulting figure will show the discrete nature of this
+% example.
+%
+% NB. Elaborating on example 2, for a local generator on lattices or
+% bitvectors, it is reasonable to just round/truncate the arguments of a
+% Gaussian. To see why, we recall an example from section 4.1 of
+% https://doi.org/10.1137/18M1164937 (preprint at
+% https://arxiv.org/abs/1801.02373):
+% sample = [1,0,1,-2,1,2,3,-2,1,-1]; mu = mean(sample); % 0.4
+% Sigma = var(sample); % 2.7111 = (1.6465)^2Quality-diversity in Dissimilarity Spaces , ,
+% % The corresponding discrete Gaussian has the following parameters.
+% % Note that solving the gradient system that gives u and B requires
+% % evaluating (indeed, differentiating) a Riemann theta function,
+% % which is probably infeasible for situations of practical interest
+% % from our perspective.
+% u = .023; B = .0587; % Taking an ample integer interval
+% n = -100:100;
+% % Form the discrete Gaussian
+% p_d = exp(2*pi*(-.5*B*n.^2+n*u));
+% p_d = p_d/sum(p_d);
+% % Form the continuous Gaussian
+% p_c = exp(-.5*(n-mu).^2/Sigma);
+% p_c = p_c/sum(p_c);
+% % Round the argument of the continuous Gaussian
+% x = linspace(min(n),max(n),10*numel(n));
+% p_x = exp(-.5*(round(x)-mu).^2/Sigma);
+% p_x = p_x/trapz(x,p_x);
+% % Rounding samples gives a pretty decent approximation to the
+% % discrete Gaussian here. However, in high dimensions this will be
+% % awful: for, as https://doi.org/10.1145/2746539.2746606 points out,
+% % sampling from a discrete Gaussian is hard enough that an efficient
+% % algorithm breaks lattice-based cryptosystems. On the other hand,
+% % this means that we shouldn 't waste our time trying to sample from a
+% % discrete Gaussian in % the first place, and rounding is a decent
+% % hack for our purposes.
+% figure; plot(n,p_d, 'ko',n,p_c, 'rx',x,p_x, 'b+'); xlim([-10,10]);
+%
+% Example 3: a Sherrington-Kirkpatrick spin glass, i.e., an optimization
+% problem on bit vectors whose global minimum is NP-hard to compute (though
+% approximable in quadratic time by https://doi.org/10.1137/20M132016X)
+% rng( 'default ');
+% N = 20; J = triu(randn(N),1); J = (J+J ')/sqrt(N);
+% f = @(bitColVector) (2*bitColVector(:)-1) '*J*(2*bitColVector(:)-1); % SK
+% dis = @(x0,x1) vecnorm(x0-x1); % square root of Hamming distance
+% L = 10;
+% T = ceil(L*log(L));
+% K = 2;
+% dim = N;
+% lb = 0*ones(dim,1); % lower bounds: Boolean
+% ub = 1*ones(dim,1); % upper bounds: Boolean
+% globalGenerator = ... % note round!
+% @() round(diag(ub-lb)*rand(dim,1)+diag(lb)*ones(dim,1));
+% localGenerator = ...
+% @(x,theta) double(xor(x~=0,rand(size(x))<theta)); % bit flips
+% M = 3e2;
+% isPosDef = 1;
+% maxExploreEffort = 128;
+% warning off; % to keep partialCouponCollection from complaining
+% [history,landmarks] = goExploreDissimilarity(f,dis,L,T,K,...
+% globalGenerator,M,isPosDef,localGenerator,maxExploreEffort);
+% warning on;
+% It is instructive to perform this example in conjunction with an analysis
+% of barriers between minima of the spin glass. This particular example has
+% about 1.04M states and 82 minima.
+%
+% NB. Most of the expensive operations in this code (function evaluations
+% and dissimilarity evaluations, though not cutoff scales) could be easily
+% performed in parallel with minor modifications. See in particular the
+% code comments "*** CAN USE parfor HERE ***" which are not exhaustive.
+%
+% Last modified 20220624 by Steve Huntsman
+%
+% Copyright (c) 2022, Systems & Technology Research. All rights reserved.
+%% Generate landmarks
+[initialStates,landmarkInd,~] = generateLandmarks(globalGenerator,dis,L,T);
+landmarks = initialStates(landmarkInd);
+%% Assign states to cells
+% Note that we are sort of overloading MATLAB terminology for cellArray:
+% this is a byproduct of sticking with Go-Explore 's "cell" terminology
+cellArray = stateCell(dis,landmarks,K,initialStates); % a matrix
+% Get unique cells to encode a set per se of inhabited cells--all
+% implicitly, to save the expense of working with the cell representation.
+% Use 'stable 'option just so we can append efficiently later if any future
+% code refactoring suggests it
+[~,~,cellNumber] = unique(cellArray, 'rows ','stable ');
+%% Initialize history with states used to generate landmarks
+% The history (to be instantiated shortly) will detail all the states for
+% which the objective is ever evaluated, their corresponding cells, the
+% "epoch" in which they were "born" (i.e., the outer loop iteration during
+% which the objective was evaluated on them), the last epoch in which they
+% were elite (0 if never elite), and their objective values
+%
+% Note that we can use this information to (cheaply) reconstruct, e.g.,
+% * the number K of closest landmarks used to define cells: this is
+% size([history.cell],1)
+% * the set of inhabited cells: up to ordering/transpose, this is% [history([history.reign]==max([history.reign])).cell]
+epoch = 1;
+% Objective *** CAN USE parfor HERE ***
+objective = nan(size(initialStates));
+for j = 1:numel(objective)
+objective(j) = f(initialStates{j});
+end
+% Reign
+reign = zeros(size(initialStates));
+for j = 1:max(cellNumber)
+inCell = find(cellNumber==j);
+[~,indArgmin] = min(objective(inCell));
+reign(inCell(indArgmin)) = epoch;
+end
+% The instantiation of history as a struct has the practical benefit
+% that--with the possible exception of states, which might not be (column)
+% vectors in general, but often will be in practice--all of the fields of
+% history can be realized as matrices a la [history.cell], etc. In the
+% general case, even the states can be realized as cell arrays using
+% braces
+initialCells = ...
+mat2cell(cellArray ',size(cellArray,2),ones(1,size(cellArray,1)));
+initialBirth = num2cell(epoch*ones(size(initialStates)));
+initialReign = num2cell(reign);
+initialObjective = num2cell(objective);
+initialHistory = [initialStates;initialCells;initialBirth;...
+initialReign;initialObjective];
+history = cell2struct(initialHistory,...
+["state","cell","birth","reign","objective"],1);
+%% Main loop
+objectiveEvalCount = numel(history);
+% Use objectiveEvalCount in lieu of numel(history) per se in order to
+% better respect the evaluation budget
+while objectiveEvalCount < objectiveEvalBudget
+%% Identify elites (a/k/a the "archive" in Go-Explore paper-speak)
+% We keep the entire history to enhance exploration and in mind of the
+% expense of evaluating objectives for our applications
+isElite = [history.reign]==epoch;
+elite = {history(isElite).state};
+%% Begin a new epoch
+epoch = epoch+1;
+%% <GO>
+%% Compute dissimilarity matrix for elites
+dissimilarityMatrix = zeros(numel(elite));
+% Symmetry of dis is assumed (as otherwise the connection between
+% diversity saturation and weightings breaks down); hence symmetry is
+% built into dissimilarityMatrix
+for j1 = 1:numel(elite)
+for j2 = (j1+1):numel(elite)
+dissimilarityMatrix(j1,j2) = dis(elite{j1},elite{j2});
+end
+end
+dissimilarityMatrix = max(dissimilarityMatrix,dissimilarityMatrix ');
+%% Compute diversity-maximizing distribution on elites
+% Compute an appropriate cutoff scale to ensure a bona fide
+% diversity-maximizing distribution on elites
+if isPosDef
+% Save lots of time--avoid computing spectra over and over
+t = posCutoff(dissimilarityMatrix)*(1+sqrt(eps));
+else
+t = strongCutoff(dissimilarityMatrix)*(1+sqrt(eps));
+end
+Z = exp(-t*dissimilarityMatrix);
+% Solve for weighting while handling degeneracies
+if max(abs(Z-ones(size(Z))),[], 'all') < eps^.75 % sqrt(eps) too big
+w = ones(size(Z,1),1);
+else
+w = Z\ones(size(Z,1),1);
+end
+if any(w<0)
+warning([ 'min(w) = ',num2str(min(w)), '< 0: adjusting post hoc ']);
+w = w-min(w);
+end
+maxDiversityPdf = w/sum(w);
+%% Construct "go distribution" goPdf balancing diversity and objective
+% The improvement of the objective values should drive progress instead
+% of (e.g.) a regularization coefficient a la temperature in simulated
+% annealing: i.e., this is only implicitly dynamic
+eliteObjectiveValue = [history(isElite).objective];
+% Match top and middle quantiles of logarithm of maximum diversity PDF
+% and elite objective values en route to producing the "go
+% distribution." Note that matching ranges or moments is complicated by, , Steve Huntsman
+% the fact that maxDivPdf has one entry that is basically zero, so its
+% logarithm is hard to normalize otherwise
+denom = max(log(maxDiversityPdf))-median(log(maxDiversityPdf));
+denom = denom+(denom==0);
+diversityTerm = (log(maxDiversityPdf)-median(log(maxDiversityPdf)))/...
+denom;
+denom = max(eliteObjectiveValue)-median(eliteObjectiveValue);
+denom = denom+(denom==0);
+objectiveTerm = (eliteObjectiveValue-median(eliteObjectiveValue))/...
+denom;
+% Encourage high diversity contributions and/or low objective values
+goPdf = exp(diversityTerm(:)-objectiveTerm(:));
+if numel(goPdf) == 1, goPdf = 1; end % preclude possibility of a NaN
+goPdf = goPdf/sum(goPdf); % get a bona fide PDF
+goCdf = cumsum(goPdf); % CDF for easy sampling
+%% Determine "go effort" expeditionsThisEpoch of sampling from goPdf
+% Use lower bound for collecting half of the coupons from goPdf. The
+% rationale here is to systematically avoid dedicating lots of effort
+% to cells that aren 't promising, but to have confidence that many
+% cells will still be explored
+[~,lowerBound,~] = partialCouponCollection(goPdf,...
+ceil(numel(goPdf)/2),numel(goPdf));
+expeditionsThisEpoch = ceil(lowerBound);
+disp([ 'objectiveEvalCount = ',num2str(objectiveEvalCount),...
+'; expeditionsThisEpoch = ',num2str(expeditionsThisEpoch),...
+'; objectiveEvalBudget = ',num2str(objectiveEvalBudget)]);
+%% </GO>
+%% Memorialize extrema of objective for normalization in loop below
+globalMax = max([history.objective]);
+globalMin = min([history.objective]);
+%% Inner loop over expeditions
+newState = [];
+for expedition = 1:expeditionsThisEpoch
+%% Sample from goCdf to get a "base elite" from which to explore
+% Recall that entries of goCdf (are presumed to) correspond to
+% inhabited cells
+baseIndex = find(rand<goCdf,1, 'first ');
+%% <EXPLORE>
+%% Determine exploration effort (from recent improvement pattern)
+% Get history of the base cell
+baseCell = stateCell(dis,landmarks,K,elite(baseIndex));
+inBase = find(ismember([history.cell] ',baseCell, 'rows '));
+% Determine expeditions that visit the base cell (easy), rather
+% than expeditions that start from the base cell (hard).
+%
+% Note that our method of recording history (viz., state, cell,
+% birth, reign, and objective) makes it impossible to exactly
+% reconstruct the itinerary of expeditions (i.e., which cells
+% hosted bases during a given epoch). While we could guess at
+% this--or, more sensibly, augment our records to know this--it 's
+% not clear that this would actually be useful, and it would
+% increase the complexity of the code. So we avoid this
+baseEpoch = unique([history(inBase).birth]);
+% In base cell from last expedition visiting it
+oneAgo = find([history(inBase).birth]==baseEpoch(end));
+% In base cell from penultimate expedition visiting it
+if numel(oneAgo) && numel(baseEpoch)>1
+twoAgo = find([history(inBase).birth]==baseEpoch(end-1));
+else
+twoAgo = oneAgo; % could be empty in principle
+end
+% Determine normalized differential in objective over last two
+% expeditions visiting the base cell
+oneAgoObjective = [history(inBase(oneAgo)).objective];
+twoAgoObjective = [history(inBase(twoAgo)).objective];
+denom = globalMax-globalMin;
+denom = denom+(denom==0);
+bestOneAgoNormed = min((oneAgoObjective-globalMin)/denom);
+bestTwoAgoNormed = min((twoAgoObjective-globalMin)/denom);
+baseDelta = bestOneAgoNormed-bestTwoAgoNormed; % in [-1,1]
+% Determine exploration effort on the basis of prior efforts
+if epoch > 2
+priorExploreEffort = ...
+nnz([history(inBase).birth]==baseEpoch(end));
+else
+% Geometric mean of 1 and maxExploreEffort seems appropriate
+priorExploreEffort = ceil(sqrt(maxExploreEffort));
+end
+foo = max(priorExploreEffort*2^-baseDelta,1);
+exploreEffort = ceil(min(foo,maxExploreEffort));
+%% Use nearby points and those in cell to interpolate f% Worry later about being efficient
+%
+% Rank states in the history by dissimilarity to the base elite
+numNearest = min(numel(history),ceil(maxExploreEffort/2));
+baseDissimilarity = nan(1,numel(history));
+for j = 1:numel(history)
+baseDissimilarity(j) = dis(elite{baseIndex},history(j).state);
+end
+[~,nearest] = sort(baseDissimilarity);
+% Combine the nearest states with those in the current cell and
+% do radial basis function interpolation with a linear kernel
+% BUG FIXED: inBase was inCell
+nearInd = unique([find(inBase(:) '),nearest(1:numNearest)]);
+x = [history(nearInd).state];
+y = [history(nearInd).objective];
+interpolant = linearRbfInterpolation(x,y);
+%% Probe, iteratively reducing bandwidth as appropriate
+numProbes = 2*maxExploreEffort;
+probe = cell(1,numProbes);
+% Initial bandwidth is big--we will bring it down to size. Note
+% that this works just fine for Booleans and Hamming distance (or
+% its ilk) along with the localGenerator function of Example 3
+% above--more generally, one can generally retool the
+% localGenerator function to play nicely with this initialization.
+% <BANDWIDTH>
+bandwidth = max(dissimilarityMatrix(baseIndex,:));
+for j = 1:numel(probe)
+% In principle we could make the localGenerator function
+% interact with available information--for example, taking the
+% in-cell and/or nearby history with objective values below
+% some quantile, getting the mean and covariance of that data,
+% and sampling from a Gaussian with those same parameters. But
+% we aren 't doing that now/yet, mainly because this
+% overspecializes.
+probe{j} = localGenerator(elite{baseIndex},bandwidth);
+end
+% Compare probe cells with base cell
+probeCellArray = stateCell(dis,landmarks,K,probe); % a matrix
+probeInCell = ismember(probeCellArray,baseCell, 'rows ');
+% Reduce bandwidth until a significant number of probes remain in
+% the current cell (cf. Gaussian annulus theorem)
+while nnz(probeInCell) < numProbes/4
+bandwidth = bandwidth/2;
+for j = 1:numel(probe)
+probe{j} = localGenerator(elite{baseIndex},bandwidth);
+end
+probeCellArray = stateCell(dis,landmarks,K,probe); % a matrix
+probeInCell = ismember(probeCellArray,baseCell, 'rows ');
+end
+% Out of an abundance of caution, avoid probe collisions (this has
+% never happened in practice if problems weren 't absurdly small or
+% localGenerator functions weren 't poorly constructed).
+uniqueProbe = unique(cell2mat(probe) ','rows ')';
+uniqueProbe = setdiff(uniqueProbe ',...
+[history(nearInd).state] ','rows ')';
+probe = mat2cell(uniqueProbe,size(uniqueProbe,1),...
+ones(1,size(uniqueProbe,2)));
+%% Get biobjective data: estimated objective & weighting component
+% A local dissimilarity matrix considers all the probes at once.
+% One can easily imagine wanting to compute differential magnitudes
+% for each probe individually, but this has disadvantages. Setting
+% aside (mostly irrelevant) concerns about computational
+% complexity, the probes must eventually treated as a batch in
+% order to perform the biobjective analysis below.
+local = [{history(nearInd).state},probe];
+dissimilarityMatrix_local = zeros(numel(local));
+for j1 = 1:numel(local)
+for j2 = 1:numel(local)
+dissimilarityMatrix_local(j1,j2) = dis(local{j1},local{j2});
+end
+end
+% Compute an appropriate cutoff scale to ensure a bona fide
+% diversity-maximizing distribution on elites
+if isPosDef
+% Save time--avoid computing spectra over and over
+t_local = posCutoff(dissimilarityMatrix_local)*(1+sqrt(eps));
+else
+t_local = strongCutoff(dissimilarityMatrix_local)*(1+sqrt(eps));
+end
+% Local similarity matrix and weighting: latter is proportional to
+% diversity-maximizing distribution
+Z_local = exp(-t_local*dissimilarityMatrix_local);
+w_local = Z_local\ones(size(Z_local,1),1);
+% Estimate of objective
+f_estimate = [y,cellfun(interpolant,probe)];
+%
+biObjective = [f_estimate ',-w_local] ';Quality-diversity in Dissimilarity Spaces , ,
+%% Determine quantitative Pareto dominance
+% We will select the least-dominated points after normalizing both
+% objectives to zero mean and unit variance a la
+biObjectiveNormalized = ...
+diag(var(biObjective,0,2))\(biObjective-mean(biObjective,2));
+% we want to rank points by their Pareto domination a la
+dominatedBy = nan(size(biObjectiveNormalized,2),1);
+for j = 1:numel(dominatedBy)
+% This is slicker than repmat
+obj_j = biObjectiveNormalized(:,j)...
+*ones(1,size(biObjectiveNormalized,2));
+dominator = min(obj_j-biObjectiveNormalized);
+dominatedBy(j) = max(dominator);
+end
+%% Determine new states to evaluate after this loop
+cutoff = numel(local)-numel(probe);
+% 1:cutoff corresponds to stuff already in history
+[~,dominanceInd] = sort(dominatedBy((cutoff+1):end));
+% Taking a minimum here to prevent an out-of-bounds error was
+% necessary on rare occasion (precisely once in dozens of uses
+% before instituted), for reasons that aren 't immediately obvious:
+% no effort has yet been made to understand this
+toEvaluate = ...
+probe(dominanceInd(1:min(exploreEffort,numel(dominanceInd))));
+% Update in a way that lets us terminate on budget
+newState = [newState,toEvaluate]; %#ok<AGROW>
+objectiveEvalCount = objectiveEvalCount+numel(toEvaluate);
+%% Respect the evaluation bound
+if objectiveEvalCount > objectiveEvalBudget
+objectiveEvalExcess = objectiveEvalCount-objectiveEvalBudget;
+newState = newState(1:(numel(newState)-objectiveEvalExcess));
+break;
+end
+%% </EXPLORE>
+end
+%% Assign states to cells (cf. similar code @ initialization)
+state = [{history.state},newState];
+cellArray = stateCell(dis,landmarks,K,state); % a matrix
+[~,~,cellNumber] = unique(cellArray, 'rows ','stable ');
+%% Prepare rest of history updates (cf. similar code @ initialization)
+birth = [[history.birth],epoch*ones(size(newState))];
+% Objective *** CAN USE parfor HERE ***
+objective = nan(size(newState));
+for j = 1:numel(objective)
+objective(j) = f(newState{j});
+end
+objective = [[history.objective],objective]; %#ok<AGROW>
+% Reign
+reign = [[history.reign],zeros(size(newState))];
+for j = 1:max(cellNumber)
+inCell = find(cellNumber==j);
+[~,indArgmin] = min(objective(inCell));
+reign(inCell(indArgmin)) = epoch;
+end
+%% Update history
+newState = state;
+newCell = mat2cell(cellArray ',...
+size(cellArray,2),ones(1,size(cellArray,1))); % a cell
+newBirth = num2cell(birth);
+newReign = num2cell(reign);
+newObjective = num2cell(objective);
+newHistory = [newState;newCell;newBirth;newReign;newObjective];
+history = cell2struct(newHistory,...
+["state","cell","birth","reign","objective"],1);
+end
+K.2 stateCell.m
+function cellId = stateCell(dis,landmarks,K,x)
+% Produce cell identifiers for states
+%
+% Inputs:
+% dis, function handle for dissimilarity (assumed symmetric)
+% landmarks,
+% cell array of landmarks (versus a larger cell array of states
+% and landmark indices)
+% K, rank cutoff <= numel(lan) = L
+% x, state(s) to map to cell
+%% Output:
+% cellId,array of size [numel(x),K] whose ith row is a sorted tuple
+% of the K closest landmarks (as indices, i.e., a subindex of
+% landmark indices)
+%
+% NB. To work with states and landmarkIndex as produced by
+% generateLandmarks, simply preclude executing this function by the
+% assignment
+% landmarks = states(landmarkIndex);
+%
+% Last modified 20220425 by Steve Huntsman
+%
+% Copyright (c) 2022, Systems & Technology Research. All rights reserved.
+%% Check scalar input
+% Other inputs are too tricky to check meaningfully here
+if ~isscalar(K), error( 'K not scalar '); end
+if ~isfinite(K), error( 'K not finite '); end
+if ~isreal(K), error( 'K not real '); end
+if K ~= round(K), error( 'K not integral '); end
+if K < 1, error( 'K < 1 '); end
+L = numel(landmarks);
+if K > L, error( 'K > L '); end
+%%
+dissimilarityFromLandmarks = nan(numel(x),L);
+for i = 1:numel(x)
+for ell = 1:L
+dissimilarityFromLandmarks(i,ell) = dis(x{i},landmarks{ell});
+end
+end
+[~,ind] = sort(dissimilarityFromLandmarks,2);
+cellId = ind(:,1:K);
+K.3 generateLandmarks.m
+function [initialStates,landmarkIndex,magnitude] = ...
+generateLandmarks(globalGenerator,dis,L,T)
+% Generate diverse landmark states/points (we use the term state by
+% reference to a dissimilarity framework for Go-Explore-type algorithms,
+% which this was developed for)
+%
+% Inputs:
+% globalGenerator,
+% function handle for global state generator
+% dis, function handle for dissimilarity (assumed symmetric)
+% L, number of landmarks (<= T)
+% T, number of points to generate (including landmarks, so >= L)
+%
+% Output:
+% initialStates, cell array of all states produced by
+% globalGenerator (for reuse)
+% landmarkIndex, indices of states that are landmarks
+% magnitude, magnitude of landmarks after given generations
+%
+% Example:
+% rng( 'default ');
+% dim = 2;
+% lb = zeros(1,dim);
+% ub = ones(1,dim);
+% globalGenerator = @() diag(ub-lb)*rand(dim,1)+diag(lb)*ones(dim,1);
+% dis = @(x0,x1) vecnorm(x0-x1);
+% L = 15;
+% T = L^2;
+% [initialStates,landmarkInd,magnitude] = ...
+% generateLandmarks(globalGenerator,dis,L,T);
+% landmarks = initialStates(landmarkIndex);
+% foo = cell2mat(landmarks);
+% figure; plot(foo(1,:),foo(2,:), 'ko')
+% figure; plot(magnitude)
+%
+% Last modified 20220425 by Steve Huntsman
+%
+% Copyright (c) 2022, Systems & Technology Research. All rights reserved.
+%% Check scalar inputs
+% Function handles are too tricky to check meaningfully
+if ~isscalar(L), error( 'L not scalar '); end
+if ~isfinite(L), error( 'L not finite '); end
+if ~isreal(L), error( 'L not real '); end
+if L ~= round(L), error( 'L not integral '); end
+if L < 1, error( 'L < 1 '); end
+if ~isscalar(T), error( 'T not scalar '); end
+if ~isfinite(T), error( 'T not finite '); end
+if ~isreal(T), error( 'T not real '); end
+if T ~= round(T), error( 'T not integral '); end
+if T < L, error( 'T < L '); end, , Steve Huntsman
+%% Initial states and landmark indices
+initialStates = cell(1,T);
+for ell = 1:L
+initialStates{ell} = globalGenerator();
+end
+landmarkIndex = 1:L;
+%% Initial dissimilarity matrix, scale, weighting, etc.
+d0 = zeros(L);
+for j = 2:L
+for k = 1:(j-1)
+% There is some superfluous indexing here for illustration
+d0(j,k) = dis(initialStates{landmarkIndex(j)},...
+initialStates{landmarkIndex(k)});
+end
+end
+d0 = max(d0,d0 ');
+% The t = 0 limit is not worth considering here, as it yields either unit
+% magnitude or naughty behavior. For the sake of generality (and because
+% it 's a one-time cost) we invoke the strong cutoff scale.
+t = strongCutoff(d0)*(1+sqrt(eps));
+Z0 = exp(-t*d0);
+w0 = Z0\ones(size(Z0,1),1);
+magnitude = nan(1,T);
+magnitude(L) = sum(w0);
+%% Main loop
+for i = (L+1):T
+%% Propose new state to replace the one with least weighting component
+[~,ind] = min(w0);
+newState = globalGenerator();
+%% Store new state
+initialStates{i} = newState;
+%% Gauge impact on magnitude at original (strong cutoff) scale
+newRow = zeros(1,L);
+for ell = 1:L
+if ell ~= ind
+newRow(ell) = dis(newState,initialStates{landmarkIndex(ell)});
+end
+end
+d1 = d0;
+d1(ind,:) = newRow;
+d1(:,ind) = newRow ';
+Z1 = exp(-t*d1);
+w1 = Z1\ones(size(Z1,1),1);
+%% Update
+if sum(w1) > magnitude(i-1)
+d0 = d1;
+w0 = w1;
+landmarkIndex(ind) = i;
+magnitude(i) = sum(w1);
+else
+magnitude(i) = magnitude(i-1);
+end
+end
+K.4 linearRbfInterpolation.m
+function interpolant = linearRbfInterpolation(x,y)
+% Radial basis function (RBF) interpolation using linear function (which is
+% also a polyharmonic spline with exponent 1). Returns the interpolant (as
+% a function handle) that fits data a la
+% interpolant(x(:,j)) = y(j).
+% This choice of RBF avoids the need for scaling, and in turn wrangling
+% with conditioning or fancy arithmetic, and so can be implemented very
+% simply. While it precludes exploiting sparsity, our intended applications
+% don 't presently leverage this anyway.
+%
+% Cf. polyharmonicRbfInterpolation.m, which generalizes this but whose
+% output runs considerably slower even in the case k = 1 (NOPs take time).
+%
+% Example:
+% rng( 'default ');
+% x = rand(1,10);
+% y = rand(size(x,2),1);
+% lri = linearRbfInterpolation(x,y);
+% foo = linspace(min(x),max(x),1e4);
+% bar = arrayfun(lri,foo);
+% figure;
+% plot(x,y, 'ko',foo,bar, 'r');
+%
+% 2D example:
+% rng( 'default ');% x = rand(2,10);
+% y = rand(size(x,2),1);
+% lri = linearRbfInterpolation(x,y);
+% [u1,u2] = meshgrid(linspace(0,1,1e2));
+% v = nan(size(u1));
+% for j1 = 1:size(v,1)
+% for j2 = 1:size(v,2)
+% v(j1,j2) = lri([u1(j1,j2);u2(j1,j2)]);
+% end
+% end
+% figure;
+% surf(u1,u2,v);
+% shading flat;
+% hold on;
+% plot3(x(1,:),x(2,:),y, 'ko');
+%
+% Last modified 20220429 by Steve Huntsman
+%
+% Copyright (c) 2022, Systems & Technology Research. All rights reserved.
+%% Check x and y
+if ~ismatrix(x), error( 'x not matrix '); end
+if ~ismatrix(y), error( 'y not matrix '); end
+if size(x,2) ~= numel(y), error( 'x and y sizes incompatible '); end
+if any(~isreal(x(:))), error( 'x not real '); end
+if any(~isreal(y(:))), error( 'y not real '); end
+if any(~isfinite(x(:))), error( 'x not finite '); end
+if any(~isfinite(y(:))), error( 'y not finite '); end
+%% Coefficients for RBF interpolation
+interpMatrix = squareform(pdist(x '));
+interpCoefficient = interpMatrix\y(:);
+%% Interpolant (as function handle: q = query point)
+interpolant = @(q) vecnorm(x-q*ones(1,size(x,2)),2,1)*interpCoefficient;
+K.5 posCutoff.m
+function t = posCutoff(d)
+% Minimal t such that exp(-u*d) admits a nonnegative weighting for any u >
+% t. Here d is an extended real matrix with zero diagonal.
+%
+% Last modified 20210224 by Steve Huntsman
+%
+% Copyright (c) 2021, Systems & Technology Research. All rights reserved.
+%% Check d matrix, square, nonnegative extended real, zero diag
+if ~ismatrix(d), error( 'd not matrix '); end
+[m,n] = size(d);
+if m ~= n, error( 'd not square '); end
+isExtendedReal = (isinf(d)|isfinite(d))&isreal(d);
+if any(any(~isExtendedReal|d<0)), error( 'd not nonnegative extended real '); end
+if any(diag(d)~=0), error( 'd diagonal not zero '); end
+%%
+t = log(n-1)/min(min(d+diag(inf(1,n))));
+lower = 0;
+upper = t;
+while 1-lower/upper>sqrt(eps)
+t = (lower+upper)/2;
+Z = exp(-t*d);
+w = Z\ones(size(Z,1),1);
+if all(w>0)
+upper = t;
+else
+lower = t;
+end
+end
+K.6 strongCutoff.m
+function t = strongCutoff(d)
+% Minimal t such that exp(-u*d) is positive semidefinite and admits a
+% nonnegative weighting for any u > t Here d is a symmetric extended real
+% matrix with zero diagonal.
+%
+% Last modified 20210319 by Steve Huntsman
+%
+% Copyright (c) 2021, Systems & Technology Research. All rights reserved.
+%% Check d matrix, square, nonnegative extended real, zero diag
+if ~ismatrix(d), error( 'd not matrix '); end
+[m,n] = size(d);
+if m ~= n, error( 'd not square '); end
+isExtendedReal = (isinf(d)|isfinite(d))&isreal(d);
+if any(any(~isExtendedReal|d<0)), error( 'd not nonnegative extended real '); endQuality-diversity in Dissimilarity Spaces , ,
+if any(diag(d)~=0), error( 'd diagonal not zero '); end
+if max(max(abs(d './d-1))) > sqrt(eps), error( 'd not symmetric '); end
+%%
+t = log(n-1)/min(min(d+diag(inf(1,n))));
+lower = 0;
+upper = t;
+while 1-lower/upper>sqrt(eps)
+t = (lower+upper)/2;
+Z = exp(-t*d);
+spec = eig(Z);
+if min(spec)>=0
+w = Z\ones(size(Z,1),1);
+if all(w>0)
+upper = t;
+else
+lower = t;
+end
+else
+lower = t;
+end
+end
+K.7 partialCouponCollection.m
+function [exact,lowerBound,upperBound] = partialCouponCollection(p,m,c)
+% Calculation of the expected time for the general coupon collection
+% problem in which the ith kind of coupon is drawn with probability p(i),
+% and m is the number of coupon types to collect. Using p = ones(1,m)/m
+% thus recovers the classical result for the uniform case. The exact result
+% is computed when reasonably cheap (for details, see Corollary 4.2 of
+% https://doi.org/10.1016/0166-218X(92)90177-C; for the case m = numel(p),
+% see Theorem 4.1), and bounds computed more generally based on the same
+% approach (both for rapidly decreasing and approximately uniform p).
+%
+% Inputs:
+% p, probability distribution
+% m, number of coupons to collect
+% c, cutoff parameter for computations (will compute 2^c terms
+% provided that c <= 16: otherwise, this will be avoided--this
+% can speed things up dramatically)
+%
+% Outputs:
+% exact expected time (= NaN if unknown) and lower/upper bounds
+%
+% For evaluation purposes it is useful to avoid taking exact results as
+% bounds; see code cells starting with
+% %% OMIT THIS FOR EVALUATION PURPOSES
+% and comment them out as warranted.
+%
+% By way of (internal) documentation, see the appended LaTeX snippet.
+%
+% NB. Note that gammaln is used instead of nchoosek except when actually
+% producing (vs counting) the combinations. This approach is MUCH faster.
+%
+% NB. Subsumes couponCollectionTotal.m and generalCouponCollection.m via
+% special cases--these are thus deprecated.
+%
+% NB. To get just the lowerBound output argument anonymously, use something
+% like this (for the second output argument):
+%
+% function nthArg = outargn(fun,n)%#ok<STOUT,INUSL>
+%
+% % Return nth output argument from function fun. If [y_1,...,y_n,...,z]
+% % = fun(inputs) then y_n = outargn(@() fun(inputs),n). I think this is
+% % a tolerable use of eval.
+%
+% eval([ '[',repmat( '~,',1,n-1), 'nthArg] = fun(); ']);
+%
+% Last modified 20220502 by Steve Huntsman
+%
+% Copyright (c) 2022, Systems & Technology Research. All rights reserved.
+%% Check p matrix, finite, real, nonnegative, sums to unity
+if ~ismatrix(p), error( 'p not matrix '); end
+isReal = isfinite(p)&isreal(p);
+if ~all(isReal(:)), error( 'p not real '); end
+if any(p<0), error( 'p not nonnegative '); end
+if abs(sum(p)-1) > sqrt(eps)
+warning( 'p does not sum to unity: normalizing ');
+end
+p = p(:) '/sum(p);
+%% Check m
+if ~isscalar(m), error( 'm not scalar '); end
+if ~isfinite(m), error( 'm not finite '); end
+if ~isreal(m), error( 'm not real '); endif m ~= round(m)
+error( 'm not integral ');
+end
+if m < 1, error( 'm < 1 '); end
+%% Check c
+if ~isscalar(c), error( 'c not scalar '); end
+if ~isfinite(c), error( 'c not finite '); end
+if ~isreal(c), error( 'c not real '); end
+if c ~= round(c)
+error( 'c not integral ');
+end
+if c < 1, error( 'c < 1 '); end
+if c > 16
+avoid_c = 1;
+warning( 'c too big to quickly compute corresponding bounds: avoiding ');
+else
+avoid_c = 0;
+end
+%% Check number of coupon types is achievable (note restriction to support)
+if m > nnz(p), error( 'numCouponTypes > nnz(p) '); end
+%% Annoying corner case
+if m == 1
+warning( 'm = 1 ');
+exact = 1;
+lowerBound = 1;
+upperBound = 1;
+return;
+end
+%%
+p = sort(p, 'descend ');
+n = numel(p);
+exact = NaN;
+%% [EXACT] Produce exact result for both bounds if easy, else m = n bound
+if n <= 16
+exact = 0;
+for ell = 0:(m-1)
+ind = nchoosek(1:n,ell);
+pInd = reshape(p(ind),size(ind));
+sign = (-1)^(m-1-ell);
+S = sum(1./(1-sum(pInd,2)));
+exact = exact+sign*nchoosek(n-ell-1,n-m)*S;
+end
+%% OMIT THIS FOR EVALUATION PURPOSES
+lowerBound = exact;
+upperBound = exact;
+return;
+end
+%% [TOTAL] Get "total" result for m = n, which is also an upper bound
+% Theorem 4.1 of https://doi.org/10.1016/0166-218X(92)90177-C yields
+% expectation for total coupon collection as an integral that admits
+% straightforward numerical computation
+% disp( 'Computing for case m = n ');
+f = @(t) 1-prod(1-exp(-p(:)*t),1);
+x = 1; while f(x) > eps, x = 10*x; end % OK upper limit for integral
+t = linspace(0,x,1e4);
+total = trapz(t,f(t));
+%% Initialize bounds
+lowerBound = 0;
+upperBound = total;
+%% Return total result if m = n
+if m == n
+exact = total;
+%% OMIT THIS FOR EVALUATION PURPOSES
+lowerBound = exact;
+upperBound = exact;
+return;
+end
+%% Now we 'll have to compute less trivial bounds (c permitting)...
+% See notes
+if ~avoid_c
+%% Form power set of 1:c
+% disp( 'Generating power set of 1:c ');
+powerSet = false(2^c,c);
+for j = 1:c
+powerSet(:,j) = bitget((0:(2^c-1)) ',j);
+end
+%% Bounds assuming rapid decay of p
+% Based on exact result of Corollary 4.2 in
+% https://doi.org/10.1016/0166-218X(92)90177-C
+% disp( 'Computing bounds for rapidly decaying p ');, , Steve Huntsman
+lb0 = 0;
+ub0 = 0;
+for ell = 0:(m-1)
+% disp([ ' ' ,num2str(ell+1), '/',num2str(m)]);
+lambda = min(c,ell);
+localPowerSet = powerSet(1:2^lambda,1:lambda);
+%%
+sum_ell_lb = 0;
+sum_ell_ub = 0;
+for j = 1:size(localPowerSet,1)
+M = localPowerSet(j,:);
+P_M = sum(p(M));
+mu = nnz(M);
+ind = 1:(ell-mu);
+if ell-mu >= 0 && ell-mu <= n-lambda
+% Indices for ell-mu smallest and largest components of p
+% that aren 't already reserved for P_M
+ind_lb = ind+n-(ell-mu);
+ind_ub = ind+min(lambda,n-(ell-mu));
+% numer = nchoosek(n-lambda,ell-mu);
+% Much faster to use gammaln than nchoosek here; no warnings
+numer = exp(gammaln((n-lambda)+1)-gammaln((ell-mu)+1)...
+-gammaln((n-lambda)-(ell-mu)+1));
+sum_ell_lb = sum_ell_lb+numer/(1-P_M-sum(p(ind_lb)));
+sum_ell_ub = sum_ell_ub+numer/(1-P_M-sum(p(ind_ub)));
+end
+end
+%%
+% coeff = nchoosek(n-ell-1,n-m)*(-1)^(m-1-ell);
+% Much faster to use gammaln than nchoosek here; no warnings
+foo = exp(gammaln((n-ell-1)+1)-gammaln((n-m)+1)...
+-gammaln((n-ell-1)-(n-m)+1));
+coeff = foo*(-1)^(m-1-ell);
+lb0 = lb0+min(coeff*sum_ell_lb,coeff*sum_ell_ub);
+ub0 = ub0+max(coeff*sum_ell_lb,coeff*sum_ell_ub);
+end
+lowerBound = max(lowerBound,lb0);
+upperBound = min(upperBound,ub0);
+%% Bounds assuming near-uniformity of p
+% Based on exact result of Corollary 4.2 in
+% https://doi.org/10.1016/0166-218X(92)90177-C. Similar mechanically to
+% preceding stuff.
+% disp( 'Computing bounds for nearly uniform p ');
+lbu = 0;
+ubu = 0;
+delta = n*p-1; % deviation from uniformity
+for ell = 0:(m-1)
+% disp([ ' ' ,num2str(ell+1), '/',num2str(m)]);
+lambda = min(c,ell);
+localPowerSet = powerSet(1:2^lambda,1:lambda);
+%%
+sum_ell_lbu = 0;
+sum_ell_ubu = 0;
+for j = 1:size(localPowerSet,1)
+M = localPowerSet(j,:);
+Delta_M = sum(p(M));
+mu = nnz(M);
+% Indices for ell-mu largest magnitude deviations that aren 't
+% already reserved for Delta_M
+ind = (1:(ell-mu))+min(lambda,n-(ell-mu));
+if ell-mu >= 0 && ell-mu <= n-lambda
+denomL = 1-(ell+Delta_M+sum(abs(delta(ind))))/n;
+denomU = 1-(ell+Delta_M-sum(abs(delta(ind))))/n;
+denomL = max(denomL,eps); % to be safe
+denomU = max(denomU,eps); % to be safe
+% numer = nchoosek(n-lambda,ell-mu);
+% Much faster to use gammaln than nchoosek here; no warnings
+numer = exp(gammaln((n-lambda)+1)-gammaln((ell-mu)+1)...
+-gammaln((n-lambda)-(ell-mu)+1));
+sum_ell_lbu = sum_ell_lbu+numer/denomL;
+sum_ell_ubu = sum_ell_ubu+numer/denomU;
+end
+end
+%%
+% coeff = nchoosek(n-ell-1,n-m)*(-1)^(m-1-ell);
+% Much faster to use gammaln than nchoosek here; no warnings
+foo = exp(gammaln((n-ell-1)+1)-gammaln((n-m)+1)...
+-gammaln((n-ell-1)-(n-m)+1));
+coeff = foo*(-1)^(m-1-ell);
+lbu = lbu+min(coeff*sum_ell_lbu,coeff*sum_ell_ubu);
+ubu = ubu+max(coeff*sum_ell_lbu,coeff*sum_ell_ubu);
+end
+lowerBound = max(lowerBound,lbu);
+upperBound = min(upperBound,ubu);
+end
+%% Augment lower bound using uniform case
+% This is an easy calculation from the Corollary 4.2 cited above: the fact
+% that the uniform case provides a lower bound is both intuitively obvious% and proved in https://doi.org/10.1239/jap/1437658606.
+%
+% (NB. It is elementary to show that the gradient of the expectation w/r/t
+% coupon probabilities is zero at uniformity, and similarly that the
+% Hessian is diagonal there [note that this tactic is not employed by the
+% reference cited here in favor of a global argument].)
+uniformLowerBound = n*(sum(1./(1:n))-sum(1./(1:(n-m))));
+lowerBound = max(lowerBound,uniformLowerBound);
+%% LaTeX documentation
+% Per Corollary 4.2 of \cite{flajolet1992birthday}, we have that the
+% expected time for the event $X_m$ of collecting $m$ of $n$ coupons via
+% IID draws from the distribution $(p_1,\dots,p_n)$ satisfies
+% \begin{equation} \label{eq:partialCoupon} \mathbb{E}(X_m) =
+% \sum_{\ell=0}^{m-1} (-1)^{m-1-\ell} \binom{n-\ell-1}{n-m} \sum_{|L| =
+% \ell} \frac{1}{1-P_L} \end{equation} with $P_L := \sum_{k \in L} p_k$.
+% However, the sum \eqref{eq:partialCoupon} is generally difficult or
+% impossible to evaluate in practice due to its combinatorial complexity,
+% and it is desirable to produce useful bounds. \footnote{ The specific
+% case $m = n$ admits an integral representation that readily admits
+% numerical computation, viz. $\mathbb{E}(X_n) = \int_0^\infty \left ( 1 -
+% \prod_{k=1}^n [1-\exp(-p_k t)] \right ) \ dt$. While an integral
+% representation of $\mathbb{E}(X_m)$ also exists for generic $m$, it is
+% also combinatorial in form and \eqref{eq:partialCoupon} (which is
+% actually just the result of evaluating it symbolically) appears easier to
+% compute. }
+%
+% Towards this end, assume w.l.o.g. that $p_1 \ge \dots \ge p_n$, and let $c
+% \le n$. (For clarity, it is helpful to imagine that $c < n$ and $p_c \gg
+% p_{c+1}$, but we do not assume this.) To bound $\sum_{|L| = \ell}
+% (1-P_L)^{-1}$, we first note that $\{L : |L| = \ell\}$ is the union of
+% disjoint sets of the form $\{L : |L| = \ell \text{ and } L \cap [\lambda]
+% = M\}$ for $M \in 2^{[\lambda]}$, where $\lambda := \min \{c,\ell\}$.
+% Thus \begin{equation} \label{eq:bound1a} \sum_{|L| = \ell}
+% \frac{1}{1-P_L} = \sum_{M \in 2^{[\lambda]}} \sum_{\substack{|L| = \ell
+% \\ L \cap [\lambda] = M}} \frac{1}{1-P_L}. \end{equation}
+%
+% Now $P_L = P_{L \cap [\lambda]} + P_{L \backslash [\lambda]}$. If we are
+% given bounds of the form $\pi_* \le P_{L \backslash [\lambda]} \le
+% \pi^*$, we get in turn that $$\frac{1}{1-P_{L \cap [\lambda]}-\pi_*} \le
+% \frac{1}{1-P_L} \le \frac{1}{1-P_{L \cap [\lambda]}-\pi^*}.$$ If
+% furthermore $\pi_*$ and $\pi^*$ depend on $L$ only via $L \cap
+% [\lambda]$, then \begin{align} \label{eq:bound1b} \frac{|\{L : |L| = \ell
+% \text{ and } L \cap [\lambda] = M\}|}{1-P_M-\pi_*} & \le
+% \sum_{\substack{|L| = \ell \\ L \cap [\lambda] = M}} \frac{1}{1-P_L}
+% \nonumber \\ & \le \frac{|\{L : |L| = \ell \text{ and } L \cap [\lambda]
+% = M\}|}{1-P_M-\pi^*}. \end{align} Meanwhile, writing $\mu := |M|$ and
+% combinatorially interpreting the Vandermonde identity $\sum_\mu
+% \binom{\lambda}{\mu} \binom{n-\lambda}{\ell-\mu} = \binom{n}{\ell}$
+% yields \begin{equation} \label{eq:bound1c} |\{L : |L| = \ell \text{ and }
+% L \cap [\lambda] = M\}| = \binom{n-\lambda}{\ell-\mu} \end{equation} and
+% in turn bounds of the form \begin{equation} \label{eq:bound1d} \sum_{M
+% \in 2^{[\lambda]}} \binom{n-\lambda}{\ell-\mu} \frac{1}{1-P_M-\pi_*} \le
+% \sum_{|L| = \ell} \frac{1}{1-P_L} \le \sum_{M \in 2^{[\lambda]}}
+% \binom{n-\lambda}{\ell-\mu} \frac{1}{1-P_M-\pi^*}. \end{equation}
+%
+% Now the best possible choice for $\pi_*$ is
+% $P_{[\ell-\mu]+n-(\ell-\mu)}$; similarly, the best possible choice for
+% $\pi^*$ is $P_{[\ell-\mu]+\min\{\lambda,n-(\ell-\mu)\}}$. This
+% immediately yields upper and lower bounds for \eqref{eq:partialCoupon},
+% though the alternating sign term leads to intricate expressions that are
+% hardly worth writing down explicitly.
+%
+% The resulting bounds are hardly worth using in some situations, and quite
+% good in others. We augment them with the easy lower bound obtained by
+% using the uniform distribution in \eqref{eq:partialCoupon}
+% \cite{anceaume2015new} and the easy upper bound obtained by taking $m =
+% n$; we also use the exact results when feasible (e.g., $n$ small or $m =
+% n$) as both upper and lower bounds. These basic augmentations have a
+% significant effect in practice.
+%
+% Experiments on exactly solvable (in particular, small) cases show that
+% though the bounds for $(1-P_L)^{-1}$ are good, the combinatorics involved
+% basically always obliterates the overall bounds for distributions of the
+% form $p_k \propto k^{-\gamma}$ with $\gamma$ a small positive integer.
+% However, the situation improves dramatically for distributions that decay
+% quickly enough.
+%
+% We can similarly also derive bounds along the lines above based on the
+% deviations $\delta_k := n p_k - 1$. The only significant difference in
+% the derivation here \emph{versus} the one detailed above is that we are forced
+% to consider absolute values of the deviations. In this regime we also
+% have the simple and tight lower bound $\mathbb{E}(X_m) \ge n(H_n -
+% H_{n-m})$, where $H_n := \sum_{k=1}^n k^{-1}$ is the $n$th harmonic
+% number \cite{flajolet1992birthday,anceaume2015new}. In fact this bound is
+% quite good for $n$ small, to the point that replacing harmonic numbers
+% with logarithms can easily produce larger deviations from the bound than
+% the error itself.Quality-diversity in Dissimilarity Spaces , ,
+K.8 goExplorePerfEval.m
+function [qd,wqd,numEvals,mag,misc] = ...
+goExplorePerfEval(history,dis,varargin)
+% Optional third, fourth argument of minObjective and maxObjective to
+% facilitate benchmarking
+%
+% figure; plot(numEvals,wqd, 'b.-',numEvals,qd, 'r.-')
+%
+% Last modified 20220630 by Steve Huntsman
+%
+% Copyright (c) 2022, Systems & Technology Research. All rights reserved.
+numEpochs = max([history.birth]);
+% Only nominal error checking for minObjective, maxObjective arguments
+narginchk(2,4) % optional argument for minObjective, maxObjective
+if nargin == 4
+minObjective = varargin{1};
+maxObjective = varargin{2};
+elseif nargin == 3
+minObjective = varargin{1};
+maxObjective = max([history.objective]);
+else
+minObjective = min([history.objective]);
+maxObjective = max([history.objective]);
+end
+qd = nan(1,numEpochs);
+wqd = nan(1,numEpochs);
+numEvals = nan(1,numEpochs);
+mag = nan(1,numEpochs);
+%%
+misc = [];
+for j = numEpochs:-1:1 % go backwards to get proper scale
+eliteInd = find(([history.reign]>=j)&([history.birth]<=j));
+elite = {history(eliteInd).state};
+objective = [history(eliteInd).objective];
+%% Dissimilarity matrix for elites
+dissimilarityMatrix = zeros(numel(elite));
+% Symmetry of dis is assumed (as otherwise the connection between% diversity saturation and weightings breaks down); hence symmetry is
+% built into dissimilarityMatrix
+for j1 = 1:numel(elite)
+for j2 = (j1+1):numel(elite)
+dissimilarityMatrix(j1,j2) = dis(elite{j1},elite{j2});
+end
+end
+dissimilarityMatrix = max(dissimilarityMatrix,dissimilarityMatrix ');
+%% Diversity-maximizing distribution on elites AT COMMON SCALE
+if j == numEpochs
+t = posCutoff(dissimilarityMatrix)*(1+sqrt(eps));
+end
+Z = exp(-t*dissimilarityMatrix);
+w = Z\ones(size(Z,1),1);
+if any(w<0)
+warning([ 'min(w) = ',num2str(min(w)), '< 0: adjusting post hoc ']);
+w = w-min(w);
+end
+%% Cell counts etc
+cellCount = nan(size(w));
+cellMax = nan(size(w));
+cellMin = nan(size(w));
+for k = 1:numel(elite)
+baseCell = history(eliteInd(k)).cell ';
+inBase = find(ismember([history.cell] ',baseCell, 'rows '));
+cellCount(k) = numel(inBase);
+cellMax(k) = max([history(inBase).objective]);
+cellMin(k) = min([history(inBase).objective]);
+end
+%% Performance metrics per epoch
+qd(j) = sum(maxObjective-objective)/(maxObjective-minObjective);
+wqd(j) = (maxObjective-objective)*(w*numel(w)/sum(w))/(maxObjective-minObjective);
+numEvals(j) = nnz([history.birth]<=j);
+mag(j) = sum(w); % magnitude
+% Miscellany
+misc(j).objective = objective;
+misc(j).w = w;
+misc(j).cellCount = cellCount;
+misc(j).t = t;
+end
